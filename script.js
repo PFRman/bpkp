@@ -1,4 +1,4 @@
-const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc"];
+const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit"];
 const triplePattern =
     new RegExp('\\s?(\\?[^\\s]+|[^\\s]+)\\s+([^\\s]+)\\s+(\\?[^\\s]+|[^\\s]+)');
 
@@ -19,7 +19,13 @@ function documentReady() {
             }
 
             // variable syntax highlighting
-            sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`)
+            sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
+
+            // auto indentation
+            // sparqlOutput = sparqlOutput.replaceAll(/{\n/g, `$&&nbsp;` + "");
+
+            // replace \n with <br>
+            sparqlOutput = sparqlOutput.replaceAll(/\n/g, `<br />`);
 
             document.querySelector("#text").innerHTML = sparqlOutput;
 
@@ -38,7 +44,6 @@ function documentReady() {
             const tripleTexts = whereText.split(".");
             let triples = []
             for (let tripleText of tripleTexts) {
-                console.log(tripleText);
                 let m = tripleText.match(triplePattern);
                 const subj = m[1].trim();
                 const pred = m[2].trim();
@@ -48,11 +53,10 @@ function documentReady() {
 
             document.querySelector("#triples").innerHTML = triples.join(`<br>`);
 
-            /*
             // Find the (optional) LIMIT clause.
-                limit_start = sparqll.find(" limit ", whereEnd)
-            limit = sparql[limit_start + 7:].strip() if limit_start > 0 else None
-
+            const limit = sparqlInput.match(/limit\s(?<limit>\d+)\b/)?.groups.limit;
+            document.querySelector(`#limit`).innerHTML = (limit ? `Limit: `+ limit : "");
+            /*
             occurrences = dict([(v, []) for v in variables])
             non_vars = []
             for t, (subj, pred, obj) in enumerate(triples):
