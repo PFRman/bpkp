@@ -1,10 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Title</title>
+    <meta charset="UTF-8">
+    <title>SPARQL-Parser</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script src="script.js"></script>
 </head>
 <body>
-
+    <div>
+        <label for="query-input"></label>
+        <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
+    </div>
+    <div>
+        <p id="text"></p>
+        <p>Variables: <span id="variables"></span></p>
+        <p>Triples: <br><span id="triples"></span></p>
+    </div>
+    <script>documentReady()</script>
 </body>
 </html>
