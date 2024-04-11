@@ -1,6 +1,8 @@
-const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit"];
+const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
 const triplePattern =
-    new RegExp('\\s?(\\?[^\\s]+|[^\\s]+)\\s+([^\\s]+)\\s+(\\?[^\\s]+|[^\\s]+)');
+    // new RegExp('\\s?(\\?\\S+|\\S+)\\s+(\\S+)\\s+(\\?\\S+|\\S+)');
+    new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s+\./g);
+    // todo how to deal with spaces in strings in the triples?
 
 function documentReady() {
     document.querySelector("#query-input").addEventListener("input",
@@ -41,23 +43,23 @@ function documentReady() {
             const whereStart = sparqlLower.search("{") + 1;
             const whereEnd = sparqlLower.search("}");
             const whereText = sparqlInput.slice(whereStart, whereEnd);
-            const tripleTexts = whereText.split(".");
-            let triples = []
-            for (let tripleText of tripleTexts) {
-                let m = tripleText.match(triplePattern);
-                const subj = m[1].trim();
-                const pred = m[2].trim();
-                const obj = m[3].trim();
-                triples.push([subj, pred, obj]);
-            }
-
+            const triples = [...whereText.matchAll(triplePattern)]
+                .map(m => [m.groups.subj, m.groups.pred, m.groups.obj]);
             document.querySelector("#triples").innerHTML = triples.join(`<br>`);
+
+            // Find the (optional) filter condition
+            const filter = sparqlLower.match(/filter\s\((?<filter>.+)\)/)?.groups.filter;
+            document.querySelector(`#filter`).innerHTML = (filter ? `Filter: ${filter}` : "");
 
             // Find the (optional) LIMIT clause.
             const limit = sparqlInput.match(/limit\s(?<limit>\d+)\b/)?.groups.limit;
             document.querySelector(`#limit`).innerHTML = (limit ? `Limit: ${limit}` : "");
 
-            // create on object of variable occurrences and a list of non-variable occurrences
+            // Find the (optional) OFFSET clause.
+            const offset = sparqlInput.match(/offset\s(?<offset>\d+)\b/)?.groups.offset;
+            document.querySelector(`#offset`).innerHTML = (offset ? `Offset: ${offset}` : "");
+
+            // Create an object with the variable occurrences and a list of non-variable occurrences
             let occurrences = Object.fromEntries(variables.map(k => [k, []]));
             let nonVars = [];
             for (let [t,[subj, pred, obj]] of triples.entries()) {
