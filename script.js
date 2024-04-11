@@ -55,35 +55,27 @@ function documentReady() {
 
             // Find the (optional) LIMIT clause.
             const limit = sparqlInput.match(/limit\s(?<limit>\d+)\b/)?.groups.limit;
-            document.querySelector(`#limit`).innerHTML = (limit ? `Limit: `+ limit : "");
-            /*
-            occurrences = dict([(v, []) for v in variables])
-            non_vars = []
-            for t, (subj, pred, obj) in enumerate(triples):
-            if subj in occurrences:
-            occurrences[subj].append(f't{t}.subject')
-            elif subj.startswith("?"):
-            occurrences[subj] = [f't{t}.subject']
-        else:
-            non_vars.append(f't{t}.subject="{subj}"')
-            if obj in occurrences:
-            occurrences[obj].append(f't{t}.object')
-            elif obj.startswith("?"):
-            occurrences[obj] = [f't{t}.object']
-        else:
-            non_vars.append(f't{t}.object="{obj}"')
-            non_vars.append(f't{t}.predicate="{pred}"')
+            document.querySelector(`#limit`).innerHTML = (limit ? `Limit: ${limit}` : "");
 
-            select = [occurrences[v][0] for v in variables]
-            tables = [f"wikidata AS t{t}" for t in range(len(triples))]
-            conditions = non_vars + [v[0] + "=" + o
-            for v in occurrences.values()
-                for o in v[1:]]
-            cnl = ',\n'
-            nla = '\nAND '
-            sql = (f'SELECT {", ".join(select)}\n'
-            f'FROM {cnl.join(tables)}\n'
-            f'WHERE {nla.join(conditions)}'
-            f'{" LIMIT " + limit if limit else ""};')*/
-        })
+            // create on object of variable occurrences and a list of non-variable occurrences
+            let occurrences = Object.fromEntries(variables.map(k => [k, []]));
+            let nonVars = [];
+            for (let [t,[subj, pred, obj]] of triples.entries()) {
+                if (subj in occurrences) occurrences[subj].push(`t${t}.subject`);
+                else if (subj.charAt(0) === `?`) occurrences[subj] = [`t${t}.subject`];
+                else nonVars.push(`t${t}.subject="${subj}"`);
+
+                if (pred in occurrences) occurrences[pred].push(`t${t}.predicate`);
+                else if (pred.charAt(0) === `?`) occurrences[pred] = [`t${t}.pred`];
+                else nonVars.push(`t${t}.object="${pred}"`);
+
+                if (obj in occurrences) occurrences[obj].push(`t${t}.object`);
+                else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
+                else nonVars.push(`t${t}.object="${obj}"`);
+            }
+
+            document.querySelector("#vocc").innerHTML = occurrences.toString();
+            document.querySelector("#nvocc").innerHTML = nonVars.toString();
+        }
+    )
 }
