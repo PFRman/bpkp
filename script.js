@@ -1,8 +1,8 @@
 const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
 const triplePattern =
-    // new RegExp('\\s?(\\?\\S+|\\S+)\\s+(\\S+)\\s+(\\?\\S+|\\S+)');
-    new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s+\./g);
-    // todo how to deal with spaces in strings in the triples?
+new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
+// todo how to deal with spaces in strings in the triples?
+// todo display <>...
 
 function documentReady() {
     document.querySelector("#query-input").addEventListener("input",
@@ -45,7 +45,7 @@ function documentReady() {
             const whereText = sparqlInput.slice(whereStart, whereEnd);
             const triples = [...whereText.matchAll(triplePattern)]
                 .map(m => [m.groups.subj, m.groups.pred, m.groups.obj]);
-            document.querySelector("#triples").innerHTML = triples.join(`<br>`);
+            document.querySelector("#triples").innerHTML = triples.join(`<br />`);
 
             // Find the (optional) filter condition
             const filter = sparqlLower.match(/filter\s\((?<filter>.+)\)/)?.groups.filter;
@@ -76,8 +76,12 @@ function documentReady() {
                 else nonVars.push(`t${t}.object="${obj}"`);
             }
 
-            document.querySelector("#vocc").innerHTML = occurrences.toString();
-            document.querySelector("#nvocc").innerHTML = nonVars.toString();
+            document.querySelector("#vocc").textContent = occurrences.toString();
+            document.querySelector("#nvocc").textContent = nonVars.toString();
+
+            // using Jison-generated SPARQL-parser
+            let parsed = sparqlParser.parse(sparqlInput);
+            document.querySelector("#parsed").innerHTML = parsed.toString();
         }
     )
 }
