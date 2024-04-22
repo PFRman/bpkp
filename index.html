@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <title>SPARQL-Parser</title>
     <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="modulepreload" href="script.js">
     <script src="sparqljs.js"></script>
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </head>
 <body>
     <div>
@@ -23,8 +24,18 @@
             <p>Variables: <span id="vocc"></span></p>
             <p>Non-variables: <span id="nvocc"></span></p>
         </div>
-        <div id="parsed"></div>
+        <div>
+            <h2>Output of SPARQL.js-Parser:</h2>
+            <div id="sparqljls"></div>
+        </div>
+        <div>
+            <h2>Output of text-utils-parser:</h2>
+            <div id="text-utils"></div>
+        </div>
     </div>
-    <script>documentReady()</script>
+    <script type="module">
+        import documentReady from "./script.js";
+        documentReady();
+    </script>
 </body>
 </html>

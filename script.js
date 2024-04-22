@@ -1,11 +1,13 @@
+import init, { parse } from "../text-utils/text-utils-grammar/pkg/text_utils_grammar.js";
+
 const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo how to deal with spaces in strings in the triples?
 
-function documentReady() {
+export default function documentReady() {
     document.querySelector("#query-input").addEventListener("input",
-        function () {
+        async function () {
             const sparqlInput = document.querySelector("#query-input").value;
             const sparqlLower = sparqlInput.toLowerCase();
             let sparqlOutput = sparqlLower
@@ -78,10 +80,25 @@ function documentReady() {
 
             // using Jison-generated SPARQL-parser
             let SparqlParser = require('sparqljs').Parser;
-            let parser = new SparqlParser();
+            const parser = new SparqlParser();
             let parsed = parser.parse(sparqlInput);
-            document.querySelector("#parsed").textContent = JSON.stringify(parsed, null, 2);
+            document.querySelector("#sparqljls").textContent = JSON.stringify(parsed, null, 2);
+            console.log("SPARQL.js");
             console.log(JSON.stringify(parsed, null, 2));
+
+            // using ad-freiburg/text-utils
+            console.log("start module...");
+            const gResponse= await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.y");
+            const sparqlGrammar = await gResponse.text();
+            const lResponse = await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.l");
+            const sparqlLexer = await lResponse.text();
+            init().then(() => {
+                let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
+                if (parsed === undefined) throw Error("parsing error");
+                console.log("text-utils:");
+                console.log(parsed);
+                document.querySelector("#text-utils").textContent = parsed;
+            });
         }
     )
 }

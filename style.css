@@ -30,7 +30,7 @@ a {
     color: lightblue;
 }
 
-#text, #parsed, #vocc, #nvocc {
+#text, #sparqljls, #text-utils, #vocc, #nvocc {
     white-space: pre;
 }
 
