@@ -30,6 +30,10 @@ a {
     color: lightblue;
 }
 
+#text, #parsed, #vocc, #nvocc {
+    white-space: pre;
+}
+
 textarea {
     width: 600px;
     height: 200px;

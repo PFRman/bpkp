@@ -2,14 +2,14 @@ const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "b
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo how to deal with spaces in strings in the triples?
-// todo display <>...
 
 function documentReady() {
     document.querySelector("#query-input").addEventListener("input",
         function () {
             const sparqlInput = document.querySelector("#query-input").value;
             const sparqlLower = sparqlInput.toLowerCase();
-            let sparqlOutput = sparqlLower;
+            let sparqlOutput = sparqlLower
+                .replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
 
             // string Syntax highlighting
             sparqlOutput = sparqlOutput.replaceAll(/"\w*"/g, `<span class="string">$&</span>`)
@@ -25,9 +25,6 @@ function documentReady() {
 
             // auto indentation
             // sparqlOutput = sparqlOutput.replaceAll(/{\n/g, `$&&nbsp;` + "");
-
-            // replace \n with <br>
-            sparqlOutput = sparqlOutput.replaceAll(/\n/g, `<br />`);
 
             document.querySelector("#text").innerHTML = sparqlOutput;
 
@@ -76,12 +73,15 @@ function documentReady() {
                 else nonVars.push(`t${t}.object="${obj}"`);
             }
 
-            document.querySelector("#vocc").textContent = occurrences.toString();
+            document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
             document.querySelector("#nvocc").textContent = nonVars.toString();
 
             // using Jison-generated SPARQL-parser
-            let parsed = sparqlParser.parse(sparqlInput);
-            document.querySelector("#parsed").innerHTML = parsed.toString();
+            let SparqlParser = require('sparqljs').Parser;
+            let parser = new SparqlParser();
+            let parsed = parser.parse(sparqlInput);
+            document.querySelector("#parsed").textContent = JSON.stringify(parsed, null, 2);
+            console.log(JSON.stringify(parsed, null, 2));
         }
     )
 }
