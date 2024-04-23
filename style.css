@@ -30,7 +30,7 @@ a {
     color: lightblue;
 }
 
-#text, #sparqljls, #text-utils, #vocc, #nvocc {
+#text, #sparqlJsOutput, #text-utils, #vocc, #nvocc {
     white-space: pre;
 }
 

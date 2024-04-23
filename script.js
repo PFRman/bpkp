@@ -6,99 +6,109 @@ new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo how to deal with spaces in strings in the triples?
 
 export default function documentReady() {
-    document.querySelector("#query-input").addEventListener("input",
-        async function () {
-            const sparqlInput = document.querySelector("#query-input").value;
-            const sparqlLower = sparqlInput.toLowerCase();
-            let sparqlOutput = sparqlLower
-                .replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
+    document.querySelector("#query-input").addEventListener("input", processQuery);
+    document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
+    document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
+}
 
-            // string Syntax highlighting
-            sparqlOutput = sparqlOutput.replaceAll(/"\w*"/g, `<span class="string">$&</span>`)
+async function processQuery() {
+    const sparqlInput = document.querySelector("#query-input").value;
+    const sparqlLower = sparqlInput.toLowerCase();
+    let sparqlOutput = sparqlLower
+        .replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
 
-            // keyword syntax highlighting
-            for (let keyword of keywords) {
-                sparqlOutput = sparqlOutput.replaceAll(keyword,
-                    `<span class="keyword">${keyword.toUpperCase()}</span>`);
-            }
+    // string Syntax highlighting
+    sparqlOutput = sparqlOutput.replaceAll(/"\w*"/g, `<span class="string">$&</span>`)
 
-            // variable syntax highlighting
-            sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
+    // keyword syntax highlighting
+    for (let keyword of keywords) {
+        sparqlOutput = sparqlOutput.replaceAll(keyword,
+            `<span class="keyword">${keyword.toUpperCase()}</span>`);
+    }
 
-            // auto indentation
-            // sparqlOutput = sparqlOutput.replaceAll(/{\n/g, `$&&nbsp;` + "");
+    // variable syntax highlighting
+    sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
 
-            document.querySelector("#text").innerHTML = sparqlOutput;
+    document.querySelector("#text").innerHTML = sparqlOutput;
 
-            // Find all variables in the SPARQL between the SELECT and WHERE clause.
-            const select_start = sparqlLower.search(/select\s/    );
-            const select_end = sparqlLower.search(/\swhere/);
-            const variables = sparqlInput.slice(select_start + 7, select_end).split(" ");
+    // Find all variables in the SPARQL between the SELECT and WHERE clause.
+    const select_start = sparqlLower.search(/select\s/    );
+    const select_end = sparqlLower.search(/\swhere/);
+    const variables = sparqlInput.slice(select_start + 7, select_end).split(" ");
 
-            document.querySelector("#variables").innerHTML = variables.toString()
-                .replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
+    document.querySelector("#variables").innerHTML = variables.toString()
+        .replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
 
-            // Find all triples between "WHERE {" and "}"
-            const whereStart = sparqlLower.search("{") + 1;
-            const whereEnd = sparqlLower.search("}");
-            const whereText = sparqlInput.slice(whereStart, whereEnd);
-            const triples = [...whereText.matchAll(triplePattern)]
-                .map(m => [m.groups.subj, m.groups.pred, m.groups.obj]);
-            document.querySelector("#triples").innerHTML = triples.join(`<br />`);
+    // Find all triples between "WHERE {" and "}"
+    const whereStart = sparqlLower.search("{") + 1;
+    const whereEnd = sparqlLower.search("}");
+    const whereText = sparqlInput.slice(whereStart, whereEnd);
+    const triples = [...whereText.matchAll(triplePattern)]
+        .map(m => [m.groups.subj, m.groups.pred, m.groups.obj]);
+    document.querySelector("#triples").innerHTML = triples.join(`<br />`);
 
-            // Find the (optional) filter condition
-            const filter = sparqlLower.match(/filter\s\((?<filter>.+)\)/)?.groups.filter;
-            document.querySelector(`#filter`).innerHTML = (filter ? `Filter: ${filter}` : "");
+    // Find the (optional) filter condition
+    const filter = sparqlLower.match(/filter\s\((?<filter>.+)\)/)?.groups.filter;
+    document.querySelector(`#filter`).innerHTML = (filter ? `Filter: ${filter}` : "");
 
-            // Find the (optional) LIMIT clause.
-            const limit = sparqlInput.match(/limit\s(?<limit>\d+)\b/)?.groups.limit;
-            document.querySelector(`#limit`).innerHTML = (limit ? `Limit: ${limit}` : "");
+    // Find the (optional) LIMIT clause.
+    const limit = sparqlInput.match(/limit\s(?<limit>\d+)\b/)?.groups.limit;
+    document.querySelector(`#limit`).innerHTML = (limit ? `Limit: ${limit}` : "");
 
-            // Find the (optional) OFFSET clause.
-            const offset = sparqlInput.match(/offset\s(?<offset>\d+)\b/)?.groups.offset;
-            document.querySelector(`#offset`).innerHTML = (offset ? `Offset: ${offset}` : "");
+    // Find the (optional) OFFSET clause.
+    const offset = sparqlInput.match(/offset\s(?<offset>\d+)\b/)?.groups.offset;
+    document.querySelector(`#offset`).innerHTML = (offset ? `Offset: ${offset}` : "");
 
-            // Create an object with the variable occurrences and a list of non-variable occurrences
-            let occurrences = Object.fromEntries(variables.map(k => [k, []]));
-            let nonVars = [];
-            for (let [t,[subj, pred, obj]] of triples.entries()) {
-                if (subj in occurrences) occurrences[subj].push(`t${t}.subject`);
-                else if (subj.charAt(0) === `?`) occurrences[subj] = [`t${t}.subject`];
-                else nonVars.push(`t${t}.subject="${subj}"`);
+    // Create an object with the variable occurrences and a list of non-variable occurrences
+    let occurrences = Object.fromEntries(variables.map(k => [k, []]));
+    let nonVars = [];
+    for (let [t,[subj, pred, obj]] of triples.entries()) {
+        if (subj in occurrences) occurrences[subj].push(`t${t}.subject`);
+        else if (subj.charAt(0) === `?`) occurrences[subj] = [`t${t}.subject`];
+        else nonVars.push(`t${t}.subject="${subj}"`);
 
-                if (pred in occurrences) occurrences[pred].push(`t${t}.predicate`);
-                else if (pred.charAt(0) === `?`) occurrences[pred] = [`t${t}.pred`];
-                else nonVars.push(`t${t}.object="${pred}"`);
+        if (pred in occurrences) occurrences[pred].push(`t${t}.predicate`);
+        else if (pred.charAt(0) === `?`) occurrences[pred] = [`t${t}.pred`];
+        else nonVars.push(`t${t}.object="${pred}"`);
 
-                if (obj in occurrences) occurrences[obj].push(`t${t}.object`);
-                else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
-                else nonVars.push(`t${t}.object="${obj}"`);
-            }
+        if (obj in occurrences) occurrences[obj].push(`t${t}.object`);
+        else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
+        else nonVars.push(`t${t}.object="${obj}"`);
+    }
 
-            document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
-            document.querySelector("#nvocc").textContent = nonVars.toString();
+    document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
+    document.querySelector("#nvocc").textContent = nonVars.toString();
 
-            // using Jison-generated SPARQL-parser
-            let SparqlParser = require('sparqljs').Parser;
-            const parser = new SparqlParser();
-            let parsed = parser.parse(sparqlInput);
-            document.querySelector("#sparqljls").textContent = JSON.stringify(parsed, null, 2);
-            console.log("SPARQL.js");
-            console.log(JSON.stringify(parsed, null, 2));
+    // using Jison-generated SPARQL-parser
+    if (document.querySelector("#sparqlJsToggle").checked) {
+        console.log("SPARQL.js");
+        let SparqlParser = require('sparqljs').Parser;
+        const parser = new SparqlParser();
+        let startTime = performance.now();
+        let parsed = parser.parse(sparqlInput);
+        let endTime = performance.now();
+        let sparqlJsTime = endTime - startTime;
+        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
+        // console.log(JSON.stringify(parsed, null, 2));
+        console.log(sparqlJsTime);
+    }
 
-            // using ad-freiburg/text-utils
-            console.log("start module...");
-            const gResponse= await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.y");
-            const sparqlGrammar = await gResponse.text();
-            const lResponse = await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.l");
-            const sparqlLexer = await lResponse.text();
-            init().then(() => {
-                let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
-                if (parsed === undefined) throw Error("parsing error");
-                console.log("text-utils:");
-                console.log(parsed);
-                document.querySelector("#text-utils").textContent = parsed;
-            });
-        }
-    )
+    // using ad-freiburg/text-utils
+    if (document.querySelector("#text-utilsToggle").checked) {
+    console.log("text-utils:");
+    const gResponse= await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.y");
+    const sparqlGrammar = await gResponse.text();
+    const lResponse = await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.l");
+    const sparqlLexer = await lResponse.text();
+    init().then(() => {
+        let startTime = performance.now();
+        let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
+        let endTime = performance.now();
+        let textUtilsTime = endTime - startTime;
+        if (parsed === undefined) throw Error("parsing error");
+        // console.log(parsed);
+        document.querySelector("#text-utils").textContent = parsed;
+        console.log(textUtilsTime);
+    });
+    }
 }

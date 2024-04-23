@@ -12,6 +12,16 @@
     <div>
         <label for="query-input"></label>
         <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
+        <div>
+            <label>
+                <input type="checkbox" id="sparqlJsToggle">
+                SPARQL.js parser
+            </label>
+            <label>
+                <input type="checkbox" id="text-utilsToggle">
+                text-utils parser
+            </label>
+        </div>
     </div>
     <div id="result">
         <p id="text"></p>
@@ -26,7 +36,7 @@
         </div>
         <div>
             <h2>Output of SPARQL.js-Parser:</h2>
-            <div id="sparqljls"></div>
+            <div id="sparqlJsOutput"></div>
         </div>
         <div>
             <h2>Output of text-utils-parser:</h2>
