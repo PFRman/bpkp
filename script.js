@@ -81,16 +81,22 @@ async function processQuery() {
 
     // using Jison-generated SPARQL-parser
     if (document.querySelector("#sparqlJsToggle").checked) {
-        console.log("SPARQL.js");
+        console.log("SPARQL.js: ");
         let SparqlParser = require('sparqljs').Parser;
         const parser = new SparqlParser();
-        let startTime = performance.now();
-        let parsed = parser.parse(sparqlInput);
-        let endTime = performance.now();
-        let sparqlJsTime = endTime - startTime;
-        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
-        // console.log(JSON.stringify(parsed, null, 2));
-        console.log(sparqlJsTime);
+        try {
+            let startTime = performance.now();
+            let parsed = parser.parse(sparqlInput);
+            let endTime = performance.now();
+            let sparqlJsTime = endTime - startTime;
+            document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
+            // console.log(JSON.stringify(parsed, null, 2));
+            console.log(sparqlJsTime);
+        } catch (e) {
+            console.log(e);
+            document.querySelector("#sparqlJsOutput").innerHTML
+                = `<span class="error">Parse Error</span>`;
+        }
     }
 
     // using ad-freiburg/text-utils
@@ -101,14 +107,23 @@ async function processQuery() {
     const lResponse = await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.l");
     const sparqlLexer = await lResponse.text();
     init().then(() => {
-        let startTime = performance.now();
-        let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
-        let endTime = performance.now();
-        let textUtilsTime = endTime - startTime;
-        if (parsed === undefined) throw Error("parsing error");
-        // console.log(parsed);
-        document.querySelector("#text-utils").textContent = parsed;
-        console.log(textUtilsTime);
+        try {
+            let startTime = performance.now();
+            let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
+            let endTime = performance.now();
+            let textUtilsTime = endTime - startTime;
+            if (parsed === undefined) {
+                throw new Error("Parse Error (undefined response)");
+            } else {
+                // console.log(parsed);
+                document.querySelector("#text-utils").textContent = parsed;
+                console.log(textUtilsTime);
+            }
+        } catch (e) {
+            document.querySelector("#text-utils").innerHTML
+                = `<span class="error">Parse Error</span>`;
+            console.log(e);
+        }
     });
     }
 }

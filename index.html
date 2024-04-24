@@ -24,23 +24,33 @@
         </div>
     </div>
     <div id="result">
-        <p id="text"></p>
-        <p>Variables: <span id="variables"></span></p>
-        <p>Triples: <br><span id="triples"></span></p>
-        <p id="filter"></p>
-        <p id="limit"></p>
-        <p id="offset"></p>
-        <div>Occurrences:
-            <p>Variables: <span id="vocc"></span></p>
-            <p>Non-variables: <span id="nvocc"></span></p>
+        <details open>
+            <summary>syntax highlighted</summary>
+            <p id="text"></p>
+        </details>
+        <details>
+            <summary>RegEx-analysis</summary>
+            <p>Variables: <span id="variables"></span></p>
+            <p>Triples: <br><span id="triples"></span></p>
+            <p id="filter"></p>
+            <p id="limit"></p>
+            <p id="offset"></p>
+            <div>Occurrences:
+                <p>Variables: <span id="vocc"></span></p>
+                <p>Non-variables: <span id="nvocc"></span></p>
+            </div>
+        </details>
+        <div>
+            <details>
+                <summary>Output of SPARQL.js-Parser:</summary>
+                <div id="sparqlJsOutput"></div>
+            </details>
         </div>
         <div>
-            <h2>Output of SPARQL.js-Parser:</h2>
-            <div id="sparqlJsOutput"></div>
-        </div>
-        <div>
-            <h2>Output of text-utils-parser:</h2>
-            <div id="text-utils"></div>
+            <details>
+                <summary>Output of text-utils-parser:</summary>
+                <div id="text-utils"></div>
+            </details>
         </div>
     </div>
     <script type="module">
