@@ -34,7 +34,7 @@ a {
     color: lightblue;
 }
 
-#text, #sparqlJsOutput, #text-utils, #vocc, #nvocc {
+#text, #sparqlJsOutput, #text-utilsOutput, #vocc, #nvocc {
     white-space: pre;
 }
 

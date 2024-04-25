@@ -1,4 +1,4 @@
-import init, { parse } from "../text-utils/text-utils-grammar/pkg/text_utils_grammar.js";
+import init, { parse } from "./src/pkg/text_utils_grammar.js";
 
 const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
 const triplePattern =
@@ -102,9 +102,9 @@ async function processQuery() {
     // using ad-freiburg/text-utils
     if (document.querySelector("#text-utilsToggle").checked) {
     console.log("text-utils:");
-    const gResponse= await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.y");
+    const gResponse= await fetch("src/sparql.y");
     const sparqlGrammar = await gResponse.text();
-    const lResponse = await fetch("../text-utils/text-utils-grammar/grammars/sparql/sparql.l");
+    const lResponse = await fetch("src/sparql.l");
     const sparqlLexer = await lResponse.text();
     init().then(() => {
         try {
@@ -116,11 +116,11 @@ async function processQuery() {
                 throw new Error("Parse Error (undefined response)");
             } else {
                 // console.log(parsed);
-                document.querySelector("#text-utils").textContent = parsed;
+                document.querySelector("#text-utilsOutput").textContent = parsed;
                 console.log(textUtilsTime);
             }
         } catch (e) {
-            document.querySelector("#text-utils").innerHTML
+            document.querySelector("#text-utilsOutput").innerHTML
                 = `<span class="error">Parse Error</span>`;
             console.log(e);
         }
