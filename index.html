@@ -12,7 +12,11 @@
     <div>
         <label for="query-input"></label>
         <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
-        <div>
+        <p>
+            <button id="autocomplete">autocomplete &gt;</button>
+        </p>
+        <div id="suggestions"></div>
+        <p>
             <label>
                 <input type="checkbox" id="sparqlJsToggle">
                 SPARQL.js parser
@@ -21,7 +25,7 @@
                 <input type="checkbox" id="text-utilsToggle">
                 text-utils parser
             </label>
-        </div>
+        </p>
     </div>
     <div id="result">
         <details open>
@@ -42,13 +46,13 @@
         </details>
         <div>
             <details>
-                <summary>Output of SPARQL.js-Parser:</summary>
+                <summary>Output of SPARQL.js parser:</summary>
                 <div id="sparqlJsOutput"></div>
             </details>
         </div>
         <div>
             <details>
-                <summary>Output of text-utils-parser:</summary>
+                <summary>Output of text-utils parser:</summary>
                 <div id="text-utilsOutput"></div>
             </details>
         </div>

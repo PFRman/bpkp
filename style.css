@@ -5,7 +5,7 @@ body {
     color: #ddd;
 }
 
-div {
+details {
     margin: 20px 0;
 }
 
@@ -24,6 +24,11 @@ div {
 
 .string {
     color: chocolate;
+}
+
+.suggestion:hover {
+    cursor: pointer;
+    background-color: #333;
 }
 
 .error {

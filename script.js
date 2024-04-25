@@ -1,14 +1,21 @@
 import init, { parse } from "./src/pkg/text_utils_grammar.js";
 
-const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
+// const keywords = ["select", "where", "filter", "prefix", "distinct", "order", "by", "desc", "limit", "offset"];
+const keywords = await fetch("src/keywords.txt")
+    .then(res => res.text())
+    .then(text => text.split("\n").map(line => line.trim()));
+
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo how to deal with spaces in strings in the triples?
 
 export default function documentReady() {
+    // hard wrap for the textarea, so that line counting works
+    document.querySelector("#query-input").wrap = "hard";
     document.querySelector("#query-input").addEventListener("input", processQuery);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
+    document.querySelector("#autocomplete").addEventListener("click", autocomplete);
 }
 
 async function processQuery() {
@@ -22,8 +29,8 @@ async function processQuery() {
 
     // keyword syntax highlighting
     for (let keyword of keywords) {
-        sparqlOutput = sparqlOutput.replaceAll(keyword,
-            `<span class="keyword">${keyword.toUpperCase()}</span>`);
+        sparqlOutput = sparqlOutput.replaceAll(new RegExp(`\\b${keyword.toLowerCase()}\\b`, "g"),
+            `<span class="keyword">${keyword}</span>`);
     }
 
     // variable syntax highlighting
@@ -32,7 +39,7 @@ async function processQuery() {
     document.querySelector("#text").innerHTML = sparqlOutput;
 
     // Find all variables in the SPARQL between the SELECT and WHERE clause.
-    const select_start = sparqlLower.search(/select\s/    );
+    const select_start = sparqlLower.search(/select\s/);
     const select_end = sparqlLower.search(/\swhere/);
     const variables = sparqlInput.slice(select_start + 7, select_end).split(" ");
 
@@ -80,6 +87,13 @@ async function processQuery() {
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
     // using Jison-generated SPARQL-parser
+    sparqlJsParse(sparqlInput);
+
+    // using ad-freiburg/text-utils
+    await textUtilsParse(sparqlInput);
+}
+
+function sparqlJsParse (sparqlInput) {
     if (document.querySelector("#sparqlJsToggle").checked) {
         console.log("SPARQL.js: ");
         let SparqlParser = require('sparqljs').Parser;
@@ -96,34 +110,94 @@ async function processQuery() {
             console.log(e);
             document.querySelector("#sparqlJsOutput").innerHTML
                 = `<span class="error">Parse Error</span>`;
+            return e.hash;
         }
     }
+}
 
-    // using ad-freiburg/text-utils
+async function textUtilsParse (sparqlInput) {
     if (document.querySelector("#text-utilsToggle").checked) {
-    console.log("text-utils:");
-    const gResponse= await fetch("src/sparql.y");
-    const sparqlGrammar = await gResponse.text();
-    const lResponse = await fetch("src/sparql.l");
-    const sparqlLexer = await lResponse.text();
-    init().then(() => {
-        try {
-            let startTime = performance.now();
-            let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
-            let endTime = performance.now();
-            let textUtilsTime = endTime - startTime;
-            if (parsed === undefined) {
-                throw new Error("Parse Error (undefined response)");
-            } else {
-                // console.log(parsed);
-                document.querySelector("#text-utilsOutput").textContent = parsed;
-                console.log(textUtilsTime);
+        console.log("text-utils:");
+        const gResponse= await fetch("src/sparql.y");
+        const sparqlGrammar = await gResponse.text();
+        const lResponse = await fetch("src/sparql.l");
+        const sparqlLexer = await lResponse.text();
+        init().then(() => {
+            try {
+                let startTime = performance.now();
+                let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
+                let endTime = performance.now();
+                let textUtilsTime = endTime - startTime;
+                if (parsed === undefined) {
+                    throw new Error("Parse Error (undefined response)");
+                } else {
+                    // console.log(parsed);
+                    document.querySelector("#text-utilsOutput").textContent = parsed;
+                    console.log(textUtilsTime);
+                }
+            } catch (e) {
+                document.querySelector("#text-utilsOutput").innerHTML
+                    = `<span class="error">Parse Error</span>`;
+                console.log(e);
             }
-        } catch (e) {
-            document.querySelector("#text-utilsOutput").innerHTML
-                = `<span class="error">Parse Error</span>`;
-            console.log(e);
+        });
+    }
+}
+
+function autocomplete () {
+    console.log("autocomplete:");
+    let sparqlInput = document.querySelector("#query-input");
+    let parseError = sparqlJsParse(sparqlInput.value);
+    if (parseError === undefined) {
+        console.log("no parse error");
+        return;
+    }
+    console.log(parseError.expected);
+    console.log(parseError.line);
+    console.log(getCursorLineNumber(sparqlInput));
+    // todo compare loc values (lines/cols)
+    if (parseError.line !== getCursorLineNumber(sparqlInput)) {
+        console.log("cursor not on faulty position");
+        return;
+    }
+    // remove additional "'"
+    let expected = parseError.expected.map(e => e.slice(1, -1));
+    console.log(expected);
+    let suggestions = [];
+    if (expected.some(e => e === "VAR")) {
+        sparqlInput.setRangeText("?dummy");
+        sparqlInput.focus();
+        // suggestions.push("?dummy");
+    } else {
+        for (let keyword of keywords) {
+            if (expected.some(e => e === keyword)) {
+                suggestions.push(keyword);
+            }
         }
-    });
+    }
+    printSuggestions(suggestions);
+    sparqlJsParse(sparqlInput.value);
+}
+
+// Get the line number of the cursor position in a <textarea>
+function getCursorLineNumber (textArea) {
+    return textArea.value.slice(0, textArea.selectionStart).split("\n").length - 1;
+}
+
+function printSuggestions (suggestions) {
+    let div = document.querySelector("#suggestions");
+    let innerHtml = "";
+    for (let suggestion of suggestions) {
+        innerHtml += `<div id="suggestion${suggestion}" class="suggestion">${suggestion}</div>`;
+    }
+    div.innerHTML = innerHtml;
+    for (let suggestion of suggestions) {
+        document.querySelector(`#suggestion${suggestion}`).addEventListener("click",
+            function () {
+                let queryInput = document.querySelector("#query-input");
+                queryInput.setRangeText(suggestion+" ", queryInput.selectionStart, queryInput.selectionEnd, "end");
+                document.querySelector("#query-input").focus();
+                div.innerHTML = "";
+            })
     }
 }
