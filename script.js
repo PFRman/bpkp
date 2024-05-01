@@ -152,31 +152,29 @@ function autocomplete () {
         console.log("no parse error");
         return;
     }
-    console.log(parseError.expected);
-    console.log(parseError.line);
-    console.log(getCursorLineNumber(sparqlInput));
-    // todo compare loc values (lines/cols)
-    if (parseError.line !== getCursorLineNumber(sparqlInput)) {
+    if (Math.abs(parseError.line - getCursorLineNumber(sparqlInput)) > 1) {
+        // todo more sophisticated comparison
         console.log("cursor not on faulty position");
         return;
     }
-    // remove additional "'"
+    // remove additional "'" in error message
     let expected = parseError.expected.map(e => e.slice(1, -1));
-    console.log(expected);
     let suggestions = [];
-    if (expected.some(e => e === "VAR")) {
-        sparqlInput.setRangeText("?dummy");
-        sparqlInput.focus();
-        // suggestions.push("?dummy");
-    } else {
-        for (let keyword of keywords) {
-            if (expected.some(e => e === keyword)) {
-                suggestions.push(keyword);
-            }
+    let generatedTerminal;
+    const RandExp = require("randexp");
+    for (let e of expected) {
+        if (e === "VAR") {
+            generatedTerminal = new RandExp(/[?$]\w/).gen();
+            suggestions.push(generatedTerminal);
+        } else if (keywords.concat(".{}()".split("")).includes(e)) {
+            generatedTerminal = e;
+            suggestions.push(generatedTerminal);
         }
     }
+    sparqlInput.focus();
+    // sparqlInput.setRangeText(generatedTerminal);
     printSuggestions(suggestions);
-    sparqlJsParse(sparqlInput.value);
+    // sparqlJsParse(sparqlInput.value);
 }
 
 // Get the line number of the cursor position in a <textarea>
@@ -185,19 +183,19 @@ function getCursorLineNumber (textArea) {
 }
 
 function printSuggestions (suggestions) {
-    let div = document.querySelector("#suggestions");
-    let innerHtml = "";
+    let suggestionDiv = document.querySelector("#suggestions");
+    suggestionDiv.innerHTML = "";
     for (let suggestion of suggestions) {
-        innerHtml += `<div id="suggestion${suggestion}" class="suggestion">${suggestion}</div>`;
-    }
-    div.innerHTML = innerHtml;
-    for (let suggestion of suggestions) {
-        document.querySelector(`#suggestion${suggestion}`).addEventListener("click",
+        let suggestionElement = document.createElement(`div`);
+        suggestionElement.classList.add("suggestion");
+        suggestionElement.innerText = suggestion;
+        suggestionElement.addEventListener("click",
             function () {
                 let queryInput = document.querySelector("#query-input");
-                queryInput.setRangeText(suggestion+" ", queryInput.selectionStart, queryInput.selectionEnd, "end");
+                queryInput.setRangeText(suggestion + " ", queryInput.selectionStart, queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
-                div.innerHTML = "";
-            })
+                suggestionDiv.innerHTML = "";
+            });
+        suggestionDiv.appendChild(suggestionElement);
     }
 }
