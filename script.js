@@ -147,7 +147,8 @@ async function textUtilsParse (sparqlInput) {
 function autocomplete () {
     console.log("autocomplete:");
     let sparqlInput = document.querySelector("#query-input");
-    let parseError = sparqlJsParse(sparqlInput.value);
+    let inputCopy = sparqlInput.value;
+    let parseError = sparqlJsParse(inputCopy);
     if (parseError === undefined) {
         console.log("no parse error");
         return;
@@ -157,23 +158,34 @@ function autocomplete () {
         console.log("cursor not on faulty position");
         return;
     }
-    // remove additional "'" in error message
-    let expected = parseError.expected.map(e => e.slice(1, -1));
-    let suggestions = [];
+    let expected = parseError.expected.map(e => e.slice(1, -1)); // remove additional "'" in error message
+    let completionSuggestions = [];
     let generatedTerminal;
+    let generatedInput;
     const RandExp = require("randexp");
+    if (parseError.token === "INVALID") return;
     for (let e of expected) {
         if (e === "VAR") {
             generatedTerminal = new RandExp(/[?$]\w/).gen();
-            suggestions.push(generatedTerminal);
-        } else if (keywords.concat(".{}()".split("")).includes(e)) {
+        } else if (e === "INTEGER") {
+            generatedTerminal = new RandExp(/\d/).gen();
+        } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
+            // "literal"/trivial terminals
             generatedTerminal = e;
-            suggestions.push(generatedTerminal);
+        } else {
+            continue;
+        }
+        generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
+            + generatedTerminal
+            + inputCopy.slice(sparqlInput.selectionEnd);
+        let generatedError = sparqlJsParse(generatedInput);
+        if (generatedError === undefined) {
+            completionSuggestions.push(generatedTerminal);
         }
     }
     sparqlInput.focus();
     // sparqlInput.setRangeText(generatedTerminal);
-    printSuggestions(suggestions);
+    printSuggestions(completionSuggestions);
     // sparqlJsParse(sparqlInput.value);
 }
 
