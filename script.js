@@ -15,7 +15,7 @@ export default function documentReady() {
     document.querySelector("#query-input").addEventListener("input", processQuery);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
-    document.querySelector("#autocomplete").addEventListener("click", autocomplete);
+    document.querySelector("#suggest").addEventListener("click", autocomplete);
 }
 
 async function processQuery() {
@@ -160,6 +160,7 @@ function autocomplete () {
     }
     let expected = parseError.expected.map(e => e.slice(1, -1)); // remove additional "'" in error message
     let completionSuggestions = [];
+    let otherSuggestions = [];
     let generatedTerminal;
     let generatedInput;
     const RandExp = require("randexp");
@@ -181,11 +182,13 @@ function autocomplete () {
         let generatedError = sparqlJsParse(generatedInput);
         if (generatedError === undefined) {
             completionSuggestions.push(generatedTerminal);
+        } else {
+            otherSuggestions.push(generatedTerminal);
         }
     }
     sparqlInput.focus();
-    // sparqlInput.setRangeText(generatedTerminal);
-    printSuggestions(completionSuggestions);
+    printSuggestions(completionSuggestions, true);
+    printSuggestions(otherSuggestions);
     // sparqlJsParse(sparqlInput.value);
 }
 
@@ -194,8 +197,9 @@ function getCursorLineNumber (textArea) {
     return textArea.value.slice(0, textArea.selectionStart).split("\n").length - 1;
 }
 
-function printSuggestions (suggestions) {
-    let suggestionDiv = document.querySelector("#suggestions");
+function printSuggestions (suggestions, primary = false) {
+    let divId = (primary ? "#primary-suggestions" : "#suggestions");
+    let suggestionDiv = document.querySelector(divId);
     suggestionDiv.innerHTML = "";
     for (let suggestion of suggestions) {
         let suggestionElement = document.createElement(`div`);

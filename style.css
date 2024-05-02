@@ -26,9 +26,23 @@ details {
     color: chocolate;
 }
 
+.suggestion {
+    padding: 5px;
+    font-family: monospace ;
+}
+
 .suggestion:hover {
     cursor: pointer;
+    background-color: #444;
+}
+
+#suggestions {
+    width: 150px;
     background-color: #333;
+}
+#primary-suggestions {
+    width: 150px;
+    background-color: #324327;
 }
 
 .error {
