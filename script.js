@@ -9,13 +9,16 @@ const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo how to deal with spaces in strings in the triples?
 
+let vars = [];
+
 export default function documentReady() {
     // hard wrap for the textarea, so that line counting works
     document.querySelector("#query-input").wrap = "hard";
+
     document.querySelector("#query-input").addEventListener("input", processQuery);
+    document.querySelector("#query-input").addEventListener("input", autocomplete);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
-    document.querySelector("#suggest").addEventListener("click", autocomplete);
 }
 
 async function processQuery() {
@@ -82,7 +85,8 @@ async function processQuery() {
         else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
         else nonVars.push(`t${t}.object="${obj}"`);
     }
-
+    vars = Object.keys(occurrences);
+    console.log(vars)
     document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
@@ -93,6 +97,7 @@ async function processQuery() {
     await textUtilsParse(sparqlInput);
 }
 
+/** Parse a SPARQL-query using the SPARQL.js module */
 function sparqlJsParse (sparqlInput) {
     if (document.querySelector("#sparqlJsToggle").checked) {
         console.log("SPARQL.js: ");
@@ -115,6 +120,7 @@ function sparqlJsParse (sparqlInput) {
     }
 }
 
+/** Parse a SPARQL-query using the ad-freiburg/text-utils module */
 async function textUtilsParse (sparqlInput) {
     if (document.querySelector("#text-utilsToggle").checked) {
         console.log("text-utils:");
@@ -144,19 +150,31 @@ async function textUtilsParse (sparqlInput) {
     }
 }
 
+/** Find fitting suggestions for the cursor position in an unfinished query and print them */
 function autocomplete () {
     console.log("autocomplete:");
     let sparqlInput = document.querySelector("#query-input");
+    let suggestions = getSuggestions(sparqlInput);
+    sparqlInput.focus();
+    printSuggestions(suggestions[0], true);
+    printSuggestions(suggestions[1]);
+}
+
+/** Find fitting suggestions for the cursor position in an unfinished query
+ * @param sparqlInput - HTML DOM input <textarea>
+ * @returns {*[][]} - Array of two arrays containing (1) completing and (2) other suggestions
+ */
+function getSuggestions (sparqlInput) {
     let inputCopy = sparqlInput.value;
     let parseError = sparqlJsParse(inputCopy);
     if (parseError === undefined) {
         console.log("no parse error");
-        return;
+        return [[],[]];
     }
     if (Math.abs(parseError.line - getCursorLineNumber(sparqlInput)) > 1) {
         // todo more sophisticated comparison
         console.log("cursor not on faulty position");
-        return;
+        return [[],[]];
     }
     let expected = parseError.expected.map(e => e.slice(1, -1)); // remove additional "'" in error message
     let completionSuggestions = [];
@@ -164,12 +182,11 @@ function autocomplete () {
     let generatedTerminal;
     let generatedInput;
     const RandExp = require("randexp");
-    if (parseError.token === "INVALID") return;
+    if (parseError.token === "INVALID") return [[],[]];
     for (let e of expected) {
         if (e === "VAR") {
             generatedTerminal = new RandExp(/[?$]\w/).gen();
-        } else if (e === "INTEGER") {
-            generatedTerminal = new RandExp(/\d/).gen();
+            // } else if (e === "INTEGER") { generatedTerminal = new RandExp(/\d/).gen();
         } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
             // "literal"/trivial terminals
             generatedTerminal = e;
@@ -180,23 +197,25 @@ function autocomplete () {
             + generatedTerminal
             + inputCopy.slice(sparqlInput.selectionEnd);
         let generatedError = sparqlJsParse(generatedInput);
+        let suggestions = (e === "VAR" ? vars.concat(["?"]) : [generatedTerminal]);
         if (generatedError === undefined) {
-            completionSuggestions.push(generatedTerminal);
+            completionSuggestions = completionSuggestions.concat(suggestions);
         } else {
-            otherSuggestions.push(generatedTerminal);
+            otherSuggestions = otherSuggestions.concat(suggestions);
         }
     }
-    sparqlInput.focus();
-    printSuggestions(completionSuggestions, true);
-    printSuggestions(otherSuggestions);
-    // sparqlJsParse(sparqlInput.value);
+    return [completionSuggestions, otherSuggestions];
 }
 
-// Get the line number of the cursor position in a <textarea>
+/** Get the line number of the cursor position in a <textarea> */
 function getCursorLineNumber (textArea) {
     return textArea.value.slice(0, textArea.selectionStart).split("\n").length - 1;
 }
 
+/** Print out a suggestion list to the suggestions-<div>
+ * @param {Array<string>} suggestions - The list of suggestions
+ * @param {boolean} primary - makes the suggestions printed out primarily
+ */
 function printSuggestions (suggestions, primary = false) {
     let divId = (primary ? "#primary-suggestions" : "#suggestions");
     let suggestionDiv = document.querySelector(divId);
@@ -208,9 +227,10 @@ function printSuggestions (suggestions, primary = false) {
         suggestionElement.addEventListener("click",
             function () {
                 let queryInput = document.querySelector("#query-input");
-                queryInput.setRangeText(suggestion + " ", queryInput.selectionStart, queryInput.selectionEnd, "end");
+                queryInput.setRangeText(suggestion, queryInput.selectionStart, queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
+                autocomplete();
             });
         suggestionDiv.appendChild(suggestionElement);
     }
