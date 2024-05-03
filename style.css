@@ -29,6 +29,8 @@ details {
 .suggestion {
     padding: 5px;
     font-family: monospace ;
+    width: 150px;
+    background-color: #333;
 }
 
 .suggestion:hover {
@@ -36,13 +38,11 @@ details {
     background-color: #444;
 }
 
-#suggestions {
-    width: 150px;
-    background-color: #333;
-}
-#primary-suggestions {
-    width: 150px;
+.primary-suggestion {
     background-color: #324327;
+}
+.primary-suggestion:hover {
+    background-color: #597544;
 }
 
 .error {

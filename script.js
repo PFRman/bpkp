@@ -19,6 +19,7 @@ export default function documentReady() {
     document.querySelector("#query-input").addEventListener("input", autocomplete);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
+    autocomplete();
 }
 
 async function processQuery() {
@@ -86,74 +87,76 @@ async function processQuery() {
         else nonVars.push(`t${t}.object="${obj}"`);
     }
     vars = Object.keys(occurrences);
-    console.log(vars)
     document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
     // using Jison-generated SPARQL-parser
-    sparqlJsParse(sparqlInput);
+    if (document.querySelector("#sparqlJsToggle").checked) console.log(sparqlJsParse(sparqlInput));
 
     // using ad-freiburg/text-utils
-    await textUtilsParse(sparqlInput);
+    if (document.querySelector("#text-utilsToggle").checked) await textUtilsParse(sparqlInput);
 }
 
-/** Parse a SPARQL-query using the SPARQL.js module */
+/** Parse a SPARQL-query using the SPARQL.js module
+ * @param {string} sparqlInput the parser input
+ * @returns The error hash of the SPARQL.js parser if it exists */
 function sparqlJsParse (sparqlInput) {
-    if (document.querySelector("#sparqlJsToggle").checked) {
-        console.log("SPARQL.js: ");
-        let SparqlParser = require('sparqljs').Parser;
-        const parser = new SparqlParser();
+    console.log("SPARQL.js: ");
+    let SparqlParser = require('sparqljs').Parser;
+    const parser = new SparqlParser();
+    try {
+        let startTime = performance.now();
+        let parsed = parser.parse(sparqlInput);
+        let endTime = performance.now();
+        let sparqlJsTime = endTime - startTime;
+        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
+        // console.log(JSON.stringify(parsed, null, 2));
+        console.log(sparqlJsTime);
+    } catch (e) {
+        // console.log(e);
+        document.querySelector("#sparqlJsOutput").innerHTML
+            = `<span class="error">Parse Error</span>`;
+        return e.hash;
+    }
+}
+
+/** Parse a SPARQL-query using the ad-freiburg/text-utils module
+ * @param {string} sparqlInput the parser input */
+async function textUtilsParse (sparqlInput) {
+    console.log("text-utils:");
+    const gResponse= await fetch("src/sparql.y");
+    const sparqlGrammar = await gResponse.text();
+    const lResponse = await fetch("src/sparql.l");
+    const sparqlLexer = await lResponse.text();
+    init().then(() => {
         try {
             let startTime = performance.now();
-            let parsed = parser.parse(sparqlInput);
+            let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
             let endTime = performance.now();
-            let sparqlJsTime = endTime - startTime;
-            document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
-            // console.log(JSON.stringify(parsed, null, 2));
-            console.log(sparqlJsTime);
-        } catch (e) {
-            console.log(e);
-            document.querySelector("#sparqlJsOutput").innerHTML
-                = `<span class="error">Parse Error</span>`;
-            return e.hash;
-        }
-    }
-}
-
-/** Parse a SPARQL-query using the ad-freiburg/text-utils module */
-async function textUtilsParse (sparqlInput) {
-    if (document.querySelector("#text-utilsToggle").checked) {
-        console.log("text-utils:");
-        const gResponse= await fetch("src/sparql.y");
-        const sparqlGrammar = await gResponse.text();
-        const lResponse = await fetch("src/sparql.l");
-        const sparqlLexer = await lResponse.text();
-        init().then(() => {
-            try {
-                let startTime = performance.now();
-                let parsed = parse(sparqlInput, sparqlGrammar, sparqlLexer);
-                let endTime = performance.now();
-                let textUtilsTime = endTime - startTime;
-                if (parsed === undefined) {
-                    throw new Error("Parse Error (undefined response)");
-                } else {
-                    // console.log(parsed);
-                    document.querySelector("#text-utilsOutput").textContent = parsed;
-                    console.log(textUtilsTime);
-                }
-            } catch (e) {
-                document.querySelector("#text-utilsOutput").innerHTML
-                    = `<span class="error">Parse Error</span>`;
-                console.log(e);
+            let textUtilsTime = endTime - startTime;
+            if (parsed === undefined) {
+                throw new Error("Parse Error (undefined response)");
+            } else {
+                // console.log(parsed);
+                document.querySelector("#text-utilsOutput").textContent = parsed;
+                console.log(textUtilsTime);
             }
-        });
-    }
+        } catch (e) {
+            document.querySelector("#text-utilsOutput").innerHTML
+                = `<span class="error">Parse Error</span>`;
+            console.log(e);
+        }
+    });
 }
 
 /** Find fitting suggestions for the cursor position in an unfinished query and print them */
 function autocomplete () {
     console.log("autocomplete:");
     let sparqlInput = document.querySelector("#query-input");
+    if (sparqlInput.value === "") {
+        printSuggestions(["SELECT", "PREFIX", "BASE", "CONSTRUCT", "DESCRIBE", "ASK"]);
+        return;
+    }
     let suggestions = getSuggestions(sparqlInput);
     sparqlInput.focus();
     printSuggestions(suggestions[0], true);
@@ -186,7 +189,9 @@ function getSuggestions (sparqlInput) {
     for (let e of expected) {
         if (e === "VAR") {
             generatedTerminal = new RandExp(/[?$]\w/).gen();
-            // } else if (e === "INTEGER") { generatedTerminal = new RandExp(/\d/).gen();
+        // } else if (e === "PNAME_NS") {
+        } else if (e === "IRIREF") {
+            generatedTerminal = "<";
         } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
             // "literal"/trivial terminals
             generatedTerminal = e;
@@ -223,6 +228,7 @@ function printSuggestions (suggestions, primary = false) {
     for (let suggestion of suggestions) {
         let suggestionElement = document.createElement(`div`);
         suggestionElement.classList.add("suggestion");
+        if (primary) suggestionElement.classList.add("primary-suggestion");
         suggestionElement.innerText = suggestion;
         suggestionElement.addEventListener("click",
             function () {
