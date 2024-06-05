@@ -7,9 +7,10 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// tothink how to deal with spaces in strings in the triples?
+// tothink: how to deal with spaces in strings in the triples?
 
 let vars = [];
+let definedPrefixes = [];
 
 export default function documentReady() {
     // hard wrap for the textarea, so that line counting works
@@ -41,6 +42,11 @@ async function processQuery() {
     sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
 
     document.querySelector("#text").innerHTML = sparqlOutput;
+
+    // Find all prefix definitions
+    definedPrefixes = [...sparqlLower.matchAll(/prefix\s(\S+:)/g)]
+        .map(m => m[1]);
+    console.log("definedPrefixes", definedPrefixes);
 
     // Find all variables in the SPARQL between the SELECT and WHERE clause.
     const select_start = sparqlLower.search(/select\s/);
@@ -115,11 +121,10 @@ function sparqlJsParse (sparqlInput, showError = true) {
         console.log("sparql.js time: ", sparqlJsTime);
         return result;
     } catch (e) {
-        // console.log(e);
         if (showError) {
             document.querySelector("#sparqlJsOutput").innerHTML
                 = `<span class="error">Parse Error (see console)</span>`;
-            throw e;
+            console.log(e);
         }
     }
 }
@@ -197,27 +202,28 @@ function getSuggestions (sparqlInput) {
 
     let completionSuggestions = [];
     let otherSuggestions = [];
-    let generatedTerminal;
-    let generatedInput;
-    const RandExp = require("randexp");
+    let generatedTerminal, generatedInput;
+    // const RandExp = require("randexp");
     // if (parseError.token === "INVALID") return [[],[]];
     for (let e of expectedAtCursor) {
+        let suggestions = [];
         if (e === "VAR") {
-            generatedTerminal = new RandExp(/[?$]\w/).gen();
-        // } else if (e === "PNAME_NS") {
+            // generatedTerminal = new RandExp(/[?$]\w/).gen();
+            suggestions = vars.concat(["?"])
+        } else if (e === "PNAME_NS") {
+            suggestions = (definedPrefixes.length > 0 ? definedPrefixes : ["rdfs:"]);
         } else if (e === "IRIREF") {
-            generatedTerminal = "<";
+            suggestions = ["<"];
         } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
             // "literal"/trivial terminals
-            generatedTerminal = e;
+            suggestions = [e];
         } else {
             continue;
         }
         generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
-            + generatedTerminal
+            + suggestions[0]
             + inputCopy.slice(sparqlInput.selectionEnd);
         let parseResult = sparqlJsParse(generatedInput, false);
-        let suggestions = (e === "VAR" ? vars.concat(["?"]) : [generatedTerminal]);
         if (parseResult !== undefined) {
             completionSuggestions = completionSuggestions.concat(suggestions);
         } else {
