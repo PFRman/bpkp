@@ -104,10 +104,10 @@ async function processQuery() {
 }
 
 /** Parse a SPARQL-query using the SPARQL.js module
- * @param {string} sparqlInput the parser input
- * @param {boolean} showError defines whether the error is carried to the output
+ * @param {string} sparqlInput - the parser input
+ * @param {boolean} silent - don't print anything to console or the document
  * @returns the parser output */
-function sparqlJsParse (sparqlInput, showError = true) {
+function sparqlJsParse (sparqlInput, silent = false) {
     console.log("SPARQL.js: ");
     let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
@@ -116,16 +116,20 @@ function sparqlJsParse (sparqlInput, showError = true) {
         let result = parser.parse(sparqlInput).result;
         let endTime = performance.now();
         let sparqlJsTime = endTime - startTime;
-        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(result, null, 2);
-        // console.log("parsed: ", JSON.stringify(result, null, 2));
-        console.log("sparql.js time: ", sparqlJsTime);
+        if (!silent) {
+            document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(result, null, 2);
+            // console.log("parsed: ", JSON.stringify(result, null, 2));
+            console.log("sparql.js time: ", sparqlJsTime);
+            document.querySelector("#query-input").style.borderColor = "green";
+        }
         return result;
     } catch (e) {
-        if (showError) {
+        if (!silent) {
             document.querySelector("#sparqlJsOutput").innerHTML
                 = `<span class="error">Parse Error (see console)</span>`;
-            console.log(e);
+            document.querySelector("#query-input").style.borderColor = "gray";
         }
+        console.log(e);
     }
 }
 
@@ -226,7 +230,8 @@ function getSuggestions (sparqlInput) {
         generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
             + suggestions[0]
             + inputCopy.slice(sparqlInput.selectionEnd);
-        let parseResult = sparqlJsParse(generatedInput, false);
+        console.log("generatedInput: ", generatedInput);
+        let parseResult = sparqlJsParse(generatedInput, true);
         if (parseResult !== undefined) {
             completionSuggestions = completionSuggestions.concat(suggestions);
         } else {

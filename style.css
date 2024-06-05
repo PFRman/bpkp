@@ -27,7 +27,7 @@ details {
 }
 
 #suggestions {
-    overflow: scroll;
+    overflow: auto;
     width: 150px;
     max-height: 350px;
 }
