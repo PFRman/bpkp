@@ -26,10 +26,15 @@ details {
     color: chocolate;
 }
 
+#suggestions {
+    overflow: scroll;
+    width: 150px;
+    max-height: 350px;
+}
+
 .suggestion {
     padding: 5px;
-    font-family: monospace ;
-    width: 150px;
+    font-family: monospace;
     background-color: #333;
 }
 

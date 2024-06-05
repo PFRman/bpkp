@@ -12,8 +12,10 @@
     <div>
         <label for="query-input"></label>
         <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
-        <div id="primary-suggestions"></div>
-        <div id="suggestions"></div>
+        <div id="suggestions">
+            <div id="primary-suggestions"></div>
+            <div id="secondary-suggestions"></div>
+        </div>
         <p>
             <label>
                 <input type="checkbox" id="sparqlJsToggle">
@@ -32,7 +34,7 @@
         </details>
         <details>
             <summary>RegEx-analysis</summary>
-            <p>Variables: <span id="variables"></span></p>
+            <p>SELECT Variables: <span id="variables"></span></p>
             <p>Triples: <br><span id="triples"></span></p>
             <p id="filter"></p>
             <p id="limit"></p>

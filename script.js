@@ -17,10 +17,11 @@ export default function documentReady() {
     document.querySelector("#query-input").wrap = "hard";
 
     document.querySelector("#query-input").addEventListener("input", processQuery);
-    document.querySelector("#query-input").addEventListener("selectionchange", autocomplete);
+    document.querySelector("#query-input").addEventListener("selectionchange", autoSuggestion);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
-    autocomplete();
+    processQuery();
+    // autoSuggestion();
 }
 
 async function processQuery() {
@@ -46,12 +47,11 @@ async function processQuery() {
     // Find all prefix definitions
     definedPrefixes = [...sparqlLower.matchAll(/prefix\s(\S+:)/g)]
         .map(m => m[1]);
-    console.log("definedPrefixes", definedPrefixes);
 
     // Find all variables in the SPARQL between the SELECT and WHERE clause.
     const select_start = sparqlLower.search(/select\s/);
     const select_end = sparqlLower.search(/\swhere/);
-    const variables = sparqlInput.slice(select_start + 7, select_end).split(" ");
+    const variables = [...sparqlInput.slice(select_start + 7, select_end).matchAll(/\?\w+/g)];
 
     document.querySelector("#variables").innerHTML = variables.toString()
         .replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
@@ -139,6 +139,7 @@ function getExpected (sparqlInput) {
         return parser.parse(sparqlInput).expected;
     } catch (e) {
         if (e.hash === undefined) throw e;
+        console.log(e.hash);
         return e.hash.expected;
     }
 }
@@ -173,13 +174,14 @@ async function textUtilsParse (sparqlInput) {
 }
 
 /** Find fitting suggestions for the cursor position and print them */
-function autocomplete () {
-    console.log("autocomplete:");
+function autoSuggestion () {
+    console.log("autoSuggestion:");
     let sparqlInput = document.querySelector("#query-input");
     let suggestions = getSuggestions(sparqlInput);
-    sparqlInput.focus();
     printSuggestions(suggestions[0], true);
     printSuggestions(suggestions[1]);
+    document.querySelector("#suggestions").scrollTop = 0;
+    sparqlInput.focus();
 }
 
 /** Find fitting suggestions for the cursor position in a (potentially unfinished) query
@@ -202,14 +204,14 @@ function getSuggestions (sparqlInput) {
 
     let completionSuggestions = [];
     let otherSuggestions = [];
-    let generatedTerminal, generatedInput;
+    let generatedInput;
     // const RandExp = require("randexp");
-    // if (parseError.token === "INVALID") return [[],[]];
+    if (expectedAtCursor === undefined) return [[],[]];
     for (let e of expectedAtCursor) {
         let suggestions = [];
         if (e === "VAR") {
             // generatedTerminal = new RandExp(/[?$]\w/).gen();
-            suggestions = vars.concat(["?"])
+            suggestions = vars.concat(["?"]);
         } else if (e === "PNAME_NS") {
             suggestions = (definedPrefixes.length > 0 ? definedPrefixes : ["rdfs:"]);
         } else if (e === "IRIREF") {
@@ -220,6 +222,7 @@ function getSuggestions (sparqlInput) {
         } else {
             continue;
         }
+        // todo debugging primary var suggestion
         generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
             + suggestions[0]
             + inputCopy.slice(sparqlInput.selectionEnd);
@@ -252,7 +255,7 @@ function getPreviousLineEndColumnNumber (textArea) {
  * @param {boolean} primary - makes the suggestions printed out primarily
  */
 function printSuggestions (suggestions, primary = false) {
-    let divId = (primary ? "#primary-suggestions" : "#suggestions");
+    let divId = (primary ? "#primary-suggestions" : "#secondary-suggestions");
     let suggestionDiv = document.querySelector(divId);
     suggestionDiv.innerHTML = "";
     for (let suggestion of suggestions) {
@@ -266,7 +269,7 @@ function printSuggestions (suggestions, primary = false) {
                 queryInput.setRangeText(suggestion, queryInput.selectionStart, queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
-                autocomplete();
+                autoSuggestion();
             });
         suggestionDiv.appendChild(suggestionElement);
     }
