@@ -2093,8 +2093,32 @@ parse: function parse(input) {
             return token;
         };
     var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    let allExpected = {};
+    // console.log(table)
     while (true) {
         state = stack[stack.length - 1];
+        // inserted by wv ->
+        expected = [];
+        for (p in table[state]) {
+            if (this.terminals_[p] && p > TERROR) {
+                expected.push('\'' + this.terminals_[p] + '\'');
+            }
+        }
+        if (!Object.hasOwn(allExpected, [yyloc.last_line, yyloc.last_column])) {
+            allExpected[[yyloc.last_line, yyloc.last_column]] = expected;
+        }
+        /*
+        function getKeyByValue (object, value) {
+            return Object.keys(object).find(key => object[key] === value);
+        }
+        /*console.log([yyloc.last_line, yyloc.last_column] ,getKeyByValue(self.symbols_,symbol), expected);
+        /*console.log("vstack", vstack)
+        console.log("lstack", lstack)
+        console.log("stack", stack)
+        console.log("tstack", tstack)
+        console.log("state", state)
+        console.log("table[state]: ", table[state])*/
+        // <- inserted
         if (this.defaultActions[state]) {
             action = this.defaultActions[state];
         } else {
@@ -2105,12 +2129,14 @@ parse: function parse(input) {
         }
                     if (typeof action === 'undefined' || !action.length || !action[0]) {
                 var errStr = '';
+                /*
                 expected = [];
                 for (p in table[state]) {
                     if (this.terminals_[p] && p > TERROR) {
                         expected.push('\'' + this.terminals_[p] + '\'');
                     }
                 }
+                */
                 if (lexer.showPosition) {
                     errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
                 } else {
@@ -2121,7 +2147,7 @@ parse: function parse(input) {
                     token: this.terminals_[symbol] || symbol,
                     line: lexer.yylineno,
                     loc: yyloc,
-                    expected: expected
+                    expected: allExpected,
                 });
             }
         if (action[0] instanceof Array && action.length > 1) {
@@ -2172,7 +2198,10 @@ parse: function parse(input) {
                 lstack
             ].concat(args));
             if (typeof r !== 'undefined') {
-                return r;
+                return {
+                    result: r,
+                    expected: allExpected,
+                };
             }
             if (len) {
                 stack = stack.slice(0, -1 * len * 2);

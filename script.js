@@ -7,7 +7,7 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// todo how to deal with spaces in strings in the triples?
+// tothink how to deal with spaces in strings in the triples?
 
 let vars = [];
 
@@ -16,7 +16,7 @@ export default function documentReady() {
     document.querySelector("#query-input").wrap = "hard";
 
     document.querySelector("#query-input").addEventListener("input", processQuery);
-    document.querySelector("#query-input").addEventListener("input", autocomplete);
+    document.querySelector("#query-input").addEventListener("selectionchange", autocomplete);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
     autocomplete();
@@ -99,24 +99,42 @@ async function processQuery() {
 
 /** Parse a SPARQL-query using the SPARQL.js module
  * @param {string} sparqlInput the parser input
- * @returns The error hash of the SPARQL.js parser if it exists */
-function sparqlJsParse (sparqlInput) {
+ * @param {boolean} showError defines whether the error is carried to the output
+ * @returns the parser output */
+function sparqlJsParse (sparqlInput, showError = true) {
     console.log("SPARQL.js: ");
     let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
     try {
         let startTime = performance.now();
-        let parsed = parser.parse(sparqlInput);
+        let result = parser.parse(sparqlInput).result;
         let endTime = performance.now();
         let sparqlJsTime = endTime - startTime;
-        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(parsed, null, 2);
-        // console.log(JSON.stringify(parsed, null, 2));
-        console.log(sparqlJsTime);
+        document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(result, null, 2);
+        // console.log("parsed: ", JSON.stringify(result, null, 2));
+        console.log("sparql.js time: ", sparqlJsTime);
+        return result;
     } catch (e) {
         // console.log(e);
-        document.querySelector("#sparqlJsOutput").innerHTML
-            = `<span class="error">Parse Error</span>`;
-        return e.hash;
+        if (showError) {
+            document.querySelector("#sparqlJsOutput").innerHTML
+                = `<span class="error">Parse Error (see console)</span>`;
+            throw e;
+        }
+    }
+}
+
+/** Parse a SPARQL-query using the SPARQL.js module and get the expected terminals list for every position
+ * @param {string} sparqlInput the parser input
+ * @returns {object} An object of expected terminals arrays with line,col as keys */
+function getExpected (sparqlInput) {
+    let SparqlParser = require('sparqljs').Parser;
+    const parser = new SparqlParser();
+    try {
+        return parser.parse(sparqlInput).expected;
+    } catch (e) {
+        if (e.hash === undefined) throw e;
+        return e.hash.expected;
     }
 }
 
@@ -139,7 +157,7 @@ async function textUtilsParse (sparqlInput) {
             } else {
                 // console.log(parsed);
                 document.querySelector("#text-utilsOutput").textContent = parsed;
-                console.log(textUtilsTime);
+                console.log("text-utils time: ", textUtilsTime);
             }
         } catch (e) {
             document.querySelector("#text-utilsOutput").innerHTML
@@ -149,44 +167,41 @@ async function textUtilsParse (sparqlInput) {
     });
 }
 
-/** Find fitting suggestions for the cursor position in an unfinished query and print them */
+/** Find fitting suggestions for the cursor position and print them */
 function autocomplete () {
     console.log("autocomplete:");
     let sparqlInput = document.querySelector("#query-input");
-    if (sparqlInput.value === "") {
-        printSuggestions(["SELECT", "PREFIX", "BASE", "CONSTRUCT", "DESCRIBE", "ASK"]);
-        return;
-    }
     let suggestions = getSuggestions(sparqlInput);
     sparqlInput.focus();
     printSuggestions(suggestions[0], true);
     printSuggestions(suggestions[1]);
 }
 
-/** Find fitting suggestions for the cursor position in an unfinished query
+/** Find fitting suggestions for the cursor position in a (potentially unfinished) query
  * @param sparqlInput - HTML DOM input <textarea>
  * @returns {*[][]} - Array of two arrays containing (1) completing and (2) other suggestions
  */
 function getSuggestions (sparqlInput) {
     let inputCopy = sparqlInput.value;
-    let parseError = sparqlJsParse(inputCopy);
-    if (parseError === undefined) {
-        console.log("no parse error");
-        return [[],[]];
+    let expected = getExpected(inputCopy);
+    console.log("expected: ", expected);
+    let col = getTrimmedCursorColumnNumber(sparqlInput);
+    let line = getCursorLineNumber(sparqlInput) + 1;
+    if (col === 0) {
+        col = getPreviousLineEndColumnNumber(sparqlInput);
+        line = line - 1;
+        // todo also accept cursor after (multiple) blank lines
     }
-    if (Math.abs(parseError.line - getCursorLineNumber(sparqlInput)) > 1) {
-        // todo more sophisticated comparison
-        console.log("cursor not on faulty position");
-        return [[],[]];
-    }
-    let expected = parseError.expected.map(e => e.slice(1, -1)); // remove additional "'" in error message
+    let expectedAtCursor = expected[[line, col]]?.map(e => e.slice(1, -1)); // remove additional "'" in expected array
+    console.log("expectedAtCursor", [line, col], expectedAtCursor);
+
     let completionSuggestions = [];
     let otherSuggestions = [];
     let generatedTerminal;
     let generatedInput;
     const RandExp = require("randexp");
-    if (parseError.token === "INVALID") return [[],[]];
-    for (let e of expected) {
+    // if (parseError.token === "INVALID") return [[],[]];
+    for (let e of expectedAtCursor) {
         if (e === "VAR") {
             generatedTerminal = new RandExp(/[?$]\w/).gen();
         // } else if (e === "PNAME_NS") {
@@ -201,9 +216,9 @@ function getSuggestions (sparqlInput) {
         generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
             + generatedTerminal
             + inputCopy.slice(sparqlInput.selectionEnd);
-        let generatedError = sparqlJsParse(generatedInput);
+        let parseResult = sparqlJsParse(generatedInput, false);
         let suggestions = (e === "VAR" ? vars.concat(["?"]) : [generatedTerminal]);
-        if (generatedError === undefined) {
+        if (parseResult !== undefined) {
             completionSuggestions = completionSuggestions.concat(suggestions);
         } else {
             otherSuggestions = otherSuggestions.concat(suggestions);
@@ -215,6 +230,15 @@ function getSuggestions (sparqlInput) {
 /** Get the line number of the cursor position in a <textarea> */
 function getCursorLineNumber (textArea) {
     return textArea.value.slice(0, textArea.selectionStart).split("\n").length - 1;
+}
+
+/** Get the column number of the cursor position in a <textarea> */
+function getTrimmedCursorColumnNumber (textArea) {
+    return textArea.value.slice(0, textArea.selectionEnd).split("\n").at(-1).trimEnd().length;
+}
+
+function getPreviousLineEndColumnNumber (textArea) {
+    return textArea.value.slice(0, textArea.selectionStart).split("\n").at(-2).trimEnd().length;
 }
 
 /** Print out a suggestion list to the suggestions-<div>
