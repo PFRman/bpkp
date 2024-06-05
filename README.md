@@ -3,7 +3,7 @@ This webpage parses SPARQL-inputs in the browser and makes text suggestions.
 
 ### Usage
 To use the webpage, simply start a web server in this directory, e.g.
-```$ python3 -m https.server```
+```$ python3 -m http.server```
 
 ### Background
 This is the first little project in my Bachelor's project, 
