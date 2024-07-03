@@ -11,14 +11,17 @@
 <body>
     <div>
         <label for="query-input"></label>
+        <div>
         <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
+        </div>
         <div id="suggestions">
             <div id="primary-suggestions"></div>
             <div id="secondary-suggestions"></div>
         </div>
+        <div id="context-sensitive-suggestions"></div>
         <p>
             <label>
-                <input type="checkbox" id="sparqlJsToggle">
+                <input type="checkbox" id="sparqlJsToggle" checked>
                 SPARQL.js parser
             </label>
             <label>

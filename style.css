@@ -26,10 +26,18 @@ details {
     color: chocolate;
 }
 
-#suggestions {
+#suggestions, #context-sensitive-suggestions {
     overflow: auto;
-    width: 150px;
     max-height: 350px;
+    display: inline-block;
+}
+
+#suggestions {
+    width: 150px;
+}
+
+#context-sensitive-suggestions {
+    width: 550px;
 }
 
 .suggestion {
