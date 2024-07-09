@@ -154,12 +154,23 @@ function getVStack (sparqlInput) {
     let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
     try {
-        return parser.parse(sparqlInput).result;
+        return [parser.parse(sparqlInput).result];
     } catch (e) {
         if (e.hash === undefined) throw e;
         // console.log("e.hash: ", e.hash);
         return e.hash.vstack;
     }}
+
+function getPrefixes (sparqlInput) {
+    let SparqlParser = require('sparqljs').Parser;
+    const parser = new SparqlParser();
+    try {
+        return parser.parse(sparqlInput).prefixes;
+    } catch (e) {
+        if (e.hash === undefined) throw e;
+        return e.hash.prefixes;
+    }
+}
 
 /** Parse a SPARQL-query using the ad-freiburg/text-utils module
  * @param {string} sparqlInput the parser input */
@@ -201,7 +212,8 @@ async function autoSuggestion () {
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
     let cSuggestions = await requestQleverSuggestions(sparqlInput);
-    printContextSensitiveSuggestions(cSuggestions);
+    let prefixes = getPrefixes(sparqlInput.value);
+    printContextSensitiveSuggestions(cSuggestions, prefixes);
     sparqlInput.focus();
 }
 
@@ -298,8 +310,9 @@ function printSuggestions (suggestions, primary = false) {
 
 /** Print out a suggestion list to the context-sensitive suggestions-<div>
  * @param {Array<string>} suggestions - The list of suggestions
+ * @param {Object} prefixes - The known prefixes
  */
-function printContextSensitiveSuggestions (suggestions) {
+function printContextSensitiveSuggestions (suggestions, prefixes) {
     let divId = "#context-sensitive-suggestions";
     let suggestionDiv = document.querySelector(divId);
     console.log("suggestions: ", suggestions);
@@ -309,7 +322,14 @@ function printContextSensitiveSuggestions (suggestions) {
         let suggestionNameElement = document.createElement(`span`);
         let suggestionUriElement = document.createElement(`span`);
         suggestionElement.classList.add("suggestion");
-        suggestionUriElement.innerText = suggestion.qui_entity.value;
+        let iri = suggestion.qui_entity.value;
+        for (const prefix in prefixes) {
+            if (iri.startsWith(prefixes[prefix])) {
+                iri = prefix + ":" + iri.slice(prefixes[prefix].length);
+                break;
+            }
+        }
+        suggestionUriElement.innerText = iri;
         suggestionNameElement.innerText =
             (suggestion.qui_name !== undefined ? suggestion.qui_name.value : suggestion.qui_alias.value);
         suggestionNameElement.style.fontWeight = "bold";
@@ -317,7 +337,9 @@ function printContextSensitiveSuggestions (suggestions) {
         suggestionElement.addEventListener("click",
             function () {
                 let queryInput = document.querySelector("#query-input");
-                queryInput.setRangeText("<" + suggestion.qui_entity.value + ">", queryInput.selectionStart, queryInput.selectionEnd, "end");
+                if (suggestion.qui_entity.type === "iri" && iri.startsWith("http://")) iri = "<" + iri + ">";
+                else if (suggestion.qui_entity.type === "literal") iri = '"' + iri + '"';
+                queryInput.setRangeText(iri, queryInput.selectionStart, queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
                 autoSuggestion();
@@ -333,8 +355,10 @@ function printContextSensitiveSuggestions (suggestions) {
 async function requestQleverSuggestions (sparqlInput) {
     let inputCopy = sparqlInput.value;
     const vstack = getVStack(inputCopy);
-    // console.log("vstack: ", vstack);
-    if (!Array.isArray(vstack) || vstack.length < 8) return [];
+    console.log("vstack: ", vstack.slice());
+    if (vstack.length < 8) return [];
+    document.querySelector("#context-sensitive-suggestions").innerHTML =
+        '<img src="src/ajax-loader.gif" alt="loading...">';
     const previousTriples = vstack[6];
     // console.log(previousTriples);
     let previousTriplesString = "";

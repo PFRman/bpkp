@@ -2151,6 +2151,7 @@ parse: function parse(input) {
                 } else {
                     errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
+                console.log("prefixes: ", Parser.prefixes);
                 this.parseError(errStr, {
                     text: lexer.match,
                     token: this.terminals_[symbol] || symbol,
@@ -2159,6 +2160,7 @@ parse: function parse(input) {
                     expected: expected,
                     allExpected: allExpected,
                     vstack: vstack,
+                    prefixes: Parser.prefixes,
                 });
             }
         if (action[0] instanceof Array && action.length > 1) {
