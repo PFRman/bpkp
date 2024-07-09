@@ -97,8 +97,8 @@ async function processQuery() {
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
     // using Jison-generated SPARQL-parser
-    if (document.querySelector("#sparqlJsToggle").checked) console.log(
-        "sparqlJsParse result:", sparqlJsParse(sparqlInput));
+    if (document.querySelector("#sparqlJsToggle").checked) /*console.log(
+        "sparqlJsParse result:", */sparqlJsParse(sparqlInput);
 
     // using ad-freiburg/text-utils
     if (document.querySelector("#text-utilsToggle").checked) await textUtilsParse(sparqlInput);
@@ -192,12 +192,14 @@ async function textUtilsParse (sparqlInput) {
 
 /** Find fitting suggestions for the cursor position and print them */
 async function autoSuggestion () {
-    console.log("autoSuggestion:");
+    // console.log("autoSuggestion:");
     let sparqlInput = document.querySelector("#query-input");
     let suggestions = getSuggestions(sparqlInput);
     printSuggestions(suggestions[0], true);
     printSuggestions(suggestions[1]);
     document.querySelector("#suggestions").scrollTop = 0;
+    document.querySelector("#context-sensitive-suggestions").innerHTML =
+        '<img src="src/ajax-loader.gif" alt="loading...">';
     let cSuggestions = await requestQleverSuggestions(sparqlInput);
     printContextSensitiveSuggestions(cSuggestions);
     sparqlInput.focus();
@@ -223,7 +225,7 @@ function getSuggestions (sparqlInput) {
 
     let completionSuggestions = [];
     let otherSuggestions = [];
-    let generatedInput;
+    // let generatedInput;
     // const RandExp = require("randexp");
     if (expectedAtCursor === undefined) return [[],[]];
     for (let e of expectedAtCursor) {
