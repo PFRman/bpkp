@@ -169,7 +169,7 @@ function getPrefixes (sparqlInput) {
     let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
     try {
-        return parser.parse(sparqlInput).prefixes;
+        return parser.parse(sparqlInput).result.prefixes;
     } catch (e) {
         if (e.hash === undefined) throw e;
         return e.hash.prefixes;
@@ -372,9 +372,12 @@ let lastQleverRequest = -1;
 async function requestQleverSuggestions (sparqlInput, lastChars) {
     let response;
     const currentCounter = qleverRequestCounter++;
-    if (timeout !== null) clearTimeout(timeout);
-
+    if (timeout !== null) {
+        clearTimeout(timeout);
+        console.debug("clearing timeout", timeout);
+    }
     timeout = setTimeout(async function () {
+        console.debug("starting timeout", timeout + ", request", currentCounter);
         try {
         let prefixes = getPrefixes(sparqlInput);
         let value = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
@@ -446,7 +449,7 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
         value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
             "LIMIT 40\n" +
             "OFFSET 0"
-        console.debug("request to qlever backend:", value);
+        console.debug("request #" + currentCounter,  "to qlever backend:", value);
         response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query=" + encodeURIComponent(value))
            .then(r => r.json());
         if (currentCounter > lastQleverRequest) {

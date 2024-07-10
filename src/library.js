@@ -2160,7 +2160,7 @@ parse: function parse(input) {
                     expected: expected,
                     allExpected: allExpected,
                     vstack: vstack,
-                    prefixes: Parser.prefixes,
+                    prefixes: Parser.prefixes ? Parser.prefixes : {},
                 });
             }
         if (action[0] instanceof Array && action.length > 1) {
