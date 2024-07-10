@@ -7,7 +7,7 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// tothink: how to deal with spaces in strings in the triples?
+// todo: how to deal with whitespaces in strings in the triples?
 
 let vars = [];
 let definedPrefixes = [];
@@ -161,6 +161,9 @@ function getVStack (sparqlInput) {
         return e.hash.vstack;
     }}
 
+/** Get the prefixes that are defined in the query
+ * @param {string} sparqlInput the parser input
+ * @returns {object} - the prefixes { "prefix" : "iri" } */
 function getPrefixes (sparqlInput) {
     let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
@@ -204,49 +207,63 @@ async function textUtilsParse (sparqlInput) {
 /** Find fitting suggestions for the cursor position and print them */
 async function autoSuggestion () {
     // console.log("autoSuggestion:");
-    let sparqlInput = document.querySelector("#query-input");
-    let suggestions = getSuggestions(sparqlInput);
-    printSuggestions(suggestions[0], true);
-    printSuggestions(suggestions[1]);
+    let sparqlInputElement = document.querySelector("#query-input");
+    const sparqlInput = sparqlInputElement.value;
+    let slicedInput = sparqlInput.slice(0, sparqlInputElement.selectionStart);
+    const charBeforeCursor = slicedInput.slice(-1);
+    let lastChars = "";
+    if (/\S/.test(charBeforeCursor)) {
+        let pos = sparqlInputElement.selectionStart - 1;
+        let char = sparqlInput[pos];
+        while (/\S/.test(char) && pos > 0) {
+            pos -= 1;
+            char = sparqlInput[pos];
+        }
+        lastChars = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
+        slicedInput = sparqlInput.slice(0, pos);
+        console.log("lastChars:", lastChars);
+        console.log("slicedInput:", slicedInput);
+    }
+    let col = slicedInput.split("\n").at(-1).trimEnd().length;
+    let line = slicedInput.split("\n").length; // 1-based (like parser)
+    // skip blank lines
+    while (col === 0 && line > 1) {
+        col = getPreviousLineEndColumnNumber(sparqlInputElement);
+        line = line - 1;
+    }
+    let suggestions = getSuggestions(sparqlInput, [line, col]);
+    printSuggestions(suggestions, lastChars);
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
-    let cSuggestions = await requestQleverSuggestions(sparqlInput);
-    let prefixes = getPrefixes(sparqlInput.value);
-    printContextSensitiveSuggestions(cSuggestions, prefixes);
-    sparqlInput.focus();
+    await requestQleverSuggestions(slicedInput, lastChars);
+    sparqlInputElement.focus();
 }
 
-/** Find fitting suggestions for the cursor position in a (potentially unfinished) query
- * @param sparqlInput - HTML DOM input <textarea>
- * @returns {*[][]} - Array of two arrays containing (1) completing and (2) other suggestions
- */
-function getSuggestions (sparqlInput) {
-    let inputCopy = sparqlInput.value;
-    let expected = getExpected(inputCopy);
-    // console.log("expected: ", expected);
-    let col = getTrimmedCursorColumnNumber(sparqlInput);
-    let line = getCursorLineNumber(sparqlInput) + 1; // 1-based (like parser)
-    if (col === 0 && line > 1) {
-        col = getPreviousLineEndColumnNumber(sparqlInput);
-        line = line - 1;
-        // todo also accept cursor after (multiple) blank lines
-    }
-    let expectedAtCursor = expected[[line, col]];
-    // console.log("expectedAtCursor", [line, col], expectedAtCursor.slice());
 
-    let completionSuggestions = [];
+/** Find fitting suggestions for the cursor position in a (potentially unfinished) query
+ * @param {String} sparqlInput - the parser input
+ * @param {[]} cursorPosition - the position of the cursor in the input field [line, col]
+ * @returns [String] - Array containing the suggestions
+ */
+function getSuggestions (sparqlInput, cursorPosition) {
+    let expected = getExpected(sparqlInput);
+    // console.log("expected: ", expected);
+    let expectedAtCursor = expected[cursorPosition];
+    // console.log("expectedAtCursor", [line, col], expectedAtCursor.slice());
+    // let completionSuggestions = [];
     let otherSuggestions = [];
+    const prefixes = Object.keys(getPrefixes(sparqlInput));
     // let generatedInput;
     // const RandExp = require("randexp");
-    if (expectedAtCursor === undefined) return [[],[]];
+    if (expectedAtCursor === undefined) return [];
     for (let e of expectedAtCursor) {
         let suggestions = [];
         if (e === "VAR") {
             // generatedTerminal = new RandExp(/[?$]\w/).gen();
             suggestions = vars.concat(["?"]);
         } else if (e === "PNAME_NS") {
-            suggestions = (definedPrefixes.length > 0 ? definedPrefixes : ["rdfs:"]);
+            suggestions = (prefixes.length > 0 ? prefixes : ["rdfs:"]);
         } else if (e === "IRIREF") {
             suggestions = ["<"];
         } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
@@ -255,9 +272,9 @@ function getSuggestions (sparqlInput) {
         } else {
             continue;
         }
-        /*generatedInput = inputCopy.slice(0, sparqlInput.selectionStart)
+        /*generatedInput = inputCopy.slice(0, sparqlInputElement.selectionStart)
             + suggestions[0]
-            + inputCopy.slice(sparqlInput.selectionEnd);
+            + inputCopy.slice(sparqlInputElement.selectionEnd);
         // console.log("generatedInput: ", generatedInput);
         let parseResult = sparqlJsParse(generatedInput, true);
         if (parseResult !== undefined) {
@@ -266,17 +283,7 @@ function getSuggestions (sparqlInput) {
             otherSuggestions = otherSuggestions.concat(suggestions);
         //}
     }
-    return [completionSuggestions, otherSuggestions];
-}
-
-/** Get the line number of the cursor position in a <textarea> */
-function getCursorLineNumber (textArea) {
-    return textArea.value.slice(0, textArea.selectionStart).split("\n").length - 1;
-}
-
-/** Get the column number of the cursor position in a <textarea> */
-function getTrimmedCursorColumnNumber (textArea) {
-    return textArea.value.slice(0, textArea.selectionStart).split("\n").at(-1).trimEnd().length;
+    return /*[completionSuggestions, */otherSuggestions/*]*/;
 }
 
 function getPreviousLineEndColumnNumber (textArea) {
@@ -285,9 +292,10 @@ function getPreviousLineEndColumnNumber (textArea) {
 
 /** Print out a suggestion list to the suggestions-<div>
  * @param {Array<string>} suggestions - The list of suggestions
+ * @param {String} lastChars - last chars of the input - first chars of the currently typed literal
  * @param {boolean} primary - makes the suggestions printed out primarily
  */
-function printSuggestions (suggestions, primary = false) {
+function printSuggestions (suggestions, lastChars, primary = false) {
     let divId = (primary ? "#primary-suggestions" : "#secondary-suggestions");
     let suggestionDiv = document.querySelector(divId);
     suggestionDiv.innerHTML = "";
@@ -299,7 +307,8 @@ function printSuggestions (suggestions, primary = false) {
         suggestionElement.addEventListener("click",
             function () {
                 let queryInput = document.querySelector("#query-input");
-                queryInput.setRangeText(suggestion, queryInput.selectionStart, queryInput.selectionEnd, "end");
+                queryInput.setRangeText(suggestion, queryInput.selectionStart - lastChars.length,
+                    queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
                 autoSuggestion();
@@ -310,12 +319,12 @@ function printSuggestions (suggestions, primary = false) {
 
 /** Print out a suggestion list to the context-sensitive suggestions-<div>
  * @param {Array<string>} suggestions - The list of suggestions
+ * @param lastChars - last chars of the input - first chars of the currently typed literal
  * @param {Object} prefixes - The known prefixes
  */
-function printContextSensitiveSuggestions (suggestions, prefixes) {
+function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
     let divId = "#context-sensitive-suggestions";
     let suggestionDiv = document.querySelector(divId);
-    console.log("suggestions: ", suggestions);
     suggestionDiv.innerHTML = "";
     for (let suggestion of suggestions) {
         let suggestionElement = document.createElement(`div`);
@@ -339,7 +348,8 @@ function printContextSensitiveSuggestions (suggestions, prefixes) {
                 let queryInput = document.querySelector("#query-input");
                 if (suggestion.qui_entity.type === "iri" && iri.startsWith("http://")) iri = "<" + iri + ">";
                 else if (suggestion.qui_entity.type === "literal") iri = '"' + iri + '"';
-                queryInput.setRangeText(iri, queryInput.selectionStart, queryInput.selectionEnd, "end");
+                queryInput.setRangeText(iri, queryInput.selectionStart - lastChars.length,
+                    queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
                 autoSuggestion();
@@ -350,55 +360,87 @@ function printContextSensitiveSuggestions (suggestions, prefixes) {
     }
 }
 
-/** Request wikidata entry suggestions from QLever
- * @returns Promise - a Promise with a javascript object containing the suggestions*/
-async function requestQleverSuggestions (sparqlInput) {
-    let inputCopy = sparqlInput.value;
-    const vstack = getVStack(inputCopy);
-    console.log("vstack: ", vstack.slice());
-    if (vstack.length < 8) return [];
-    document.querySelector("#context-sensitive-suggestions").innerHTML =
-        '<img src="src/ajax-loader.gif" alt="loading...">';
-    const previousTriples = vstack[6];
-    // console.log(previousTriples);
-    let previousTriplesString = "";
-    for (let triple of previousTriples) {
-        // console.log(triple);
-        previousTriplesString +=
-            `${termToString(triple[0].subject)} ${termToString(triple[0].predicate)} ${termToString(triple[0].object)} .\n`;
-    }
-    const subject = vstack[7];
-    let subjectString = termToString(subject);
-    const verb = vstack[8];
-    // console.log("subject: ", subject, "\nverb: ", verb);
-    // "?query=PREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology-beta%23%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+wds%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0A%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0APREFIX+ontolex%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Flemon%2Fontolex%23%3E%0APREFIX+dct%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0APREFIX+schema%3A+%3Chttp%3A%2F%2Fschema.org%2F%3E%0APREFIX+cc%3A+%3Chttp%3A%2F%2Fcreativecommons.org%2Fns%23%3E%0APREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Font%2Fgeosparql%23%3E%0APREFIX+geof%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Fdef%2Ffunction%2Fgeosparql%2F%3E%0APREFIX+prov%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Fprov%23%3E%0APREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+data%3A+%3Chttps%3A%2F%2Fwww.wikidata.org%2Fwiki%2FSpecial%3AEntityData%2F%3E%0APREFIX+s%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+ref%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Freference%2F%3E%0APREFIX+v%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fvalue%2F%3E%0APREFIX+wdt%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect%2F%3E%0APREFIX+wdtn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect-normalized%2F%3E%0APREFIX+p%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2F%3E%0APREFIX+ps%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2F%3E%0APREFIX+psv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue%2F%3E%0APREFIX+psn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue-normalized%2F%3E%0APREFIX+pq%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2F%3E%0APREFIX+pqv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue%2F%3E%0APREFIX+pqn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue-normalized%2F%3E%0APREFIX+pr%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2F%3E%0APREFIX+prv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue%2F%3E%0APREFIX+prn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue-normalized%2F%3E%0APREFIX+wdno%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fnovalue%2F%3E%0APREFIX+imdb%3A+%3Chttps%3A%2F%2Fwww.imdb.com%2F%3E%0APREFIX+qfn%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Ffunction%23%3E%0APREFIX+ql%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Fbuiltin-functions%2F%3E%0ASELECT+%3Fqui_entity+%28SAMPLE%28%3Fname%29+as+%3Fqui_name%29+%28SAMPLE%28%3Falias%29+as+%3Fqui_alias%29+%28SAMPLE%28%3Fcount%29+as+%3Fqui_count%29+WHERE+%7B%0A++%7B+SELECT+%3Fqui_entity+%28COUNT%28%3Fqui_entity%29+AS+%3Fcount%29+WHERE+%7B%0A++++wd%3AQ90+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2FP47%3E+%3Fo+.+%3Fo+%3Fp+%3Fqui_entity+.%0A++%7D+GROUP+BY+%3Fqui_entity+%7D%0A++%0A++OPTIONAL+%7B+%3Fqui_entity+%40en%40rdfs%3Alabel+%3Fname+%7D%0A++BIND+%28%3Fqui_entity+AS+%3Falias%29%0A++%0A%7D+GROUP+BY+%3Fqui_entity+ORDER+BY+DESC%28%3Fqui_count%29%0ALIMIT+40%0AOFFSET+0&timeout=5000ms"
-    let value = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n" +
-        "SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {\n";
-    if (verb === undefined) {
-        value +=
-            `{ SELECT ?qui_entity (COUNT(DISTINCT ?${subject.value}) AS ?count) WHERE {\n` +
-            previousTriplesString +
-            `${subjectString} ?qui_entity ?qui_object }\n` +
-            "GROUP BY ?qui_entity }\n" +
-            "?qui_tmp_1 ?qui_tmp_2 ?qui_entity .\n" +
-            "?qui_tmp_1 @en@rdfs:label ?name .\n" +
-            "BIND (?name AS ?alias)\n"
-    } else {
-        let verbString = termToString(verb);
-        value +=
-            "{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {\n" +
-            previousTriplesString +
-            `${subjectString} ${verbString} ?qui_entity .\n` +
-            "} GROUP BY ?qui_entity }\n" +
-            "OPTIONAL { ?qui_entity @en@rdfs:label ?name }\n" +
-            "BIND (?qui_entity AS ?alias)\n"
-    }
-    value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
-        "LIMIT 40\n" +
-        "OFFSET 0"
-    let response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query=" + encodeURIComponent(value))
-       .then(r => r.json());
-    return response.results.bindings;
+let timeout = null;
+let qleverRequestCounter = 0;
+let lastQleverRequest = -1;
+/** Request wikidata entry suggestions from QLever and print them
+ * */
+async function requestQleverSuggestions (sparqlInput, lastChars) {
+    let response;
+    const currentCounter = qleverRequestCounter++;
+    if (timeout !== null) clearTimeout(timeout);
+
+    timeout = setTimeout(async function () {
+        let prefixes = getPrefixes(sparqlInput);
+        let value = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+        if (lastChars.length > 2) {
+            value += "PREFIX wikibase: <http://wikiba.se/ontology#>\n" +
+                "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n" +
+                "PREFIX schema: <http://schema.org/>" +
+                "SELECT ?qui_entity (SAMPLE(?name) AS ?qui_name) (SAMPLE(?alias) AS ?qui_alias) (SAMPLE(?sitelinks) AS ?qui_count) WHERE {\n" +
+                "  { SELECT ?qui_entity ?name ?alias WHERE {\n" +
+                "      ?qui_entity @en@rdfs:label ?name .\n" +
+                "      ?qui_entity @en@skos:altLabel ?alias .\n" +
+                `      FILTER (REGEX(STR(?name), "^${lastChars}") || REGEX(STR(?alias), "^${lastChars}")) } }\n` +
+                "  ?qui_entity ^schema:about ?m . ?m wikibase:sitelinks ?sitelinks\n"
+        } else {
+            const vstack = getVStack(sparqlInput);
+            console.log("vstack: ", vstack.slice());
+            if (vstack.length < 8) {
+                printContextSensitiveSuggestions([], "", {})
+                return;
+            }
+            document.querySelector("#context-sensitive-suggestions").innerHTML =
+                '<img src="src/ajax-loader.gif" alt="loading...">';
+            const previousTriples = vstack[6];
+            // console.log(previousTriples);
+            let previousTriplesString = "";
+            for (let triple of previousTriples) {
+                // console.log(triple);
+                previousTriplesString +=
+                    `${termToString(triple[0].subject)} ${termToString(triple[0].predicate)} ${termToString(triple[0].object)} .\n`;
+            }
+            const subject = vstack[7];
+            let subjectString = termToString(subject);
+            const verb = vstack[8];
+            // console.log("subject: ", subject, "\nverb: ", verb);
+            // "?query=PREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology-beta%23%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+wds%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0A%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0APREFIX+ontolex%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Flemon%2Fontolex%23%3E%0APREFIX+dct%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0APREFIX+schema%3A+%3Chttp%3A%2F%2Fschema.org%2F%3E%0APREFIX+cc%3A+%3Chttp%3A%2F%2Fcreativecommons.org%2Fns%23%3E%0APREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Font%2Fgeosparql%23%3E%0APREFIX+geof%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Fdef%2Ffunction%2Fgeosparql%2F%3E%0APREFIX+prov%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Fprov%23%3E%0APREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+data%3A+%3Chttps%3A%2F%2Fwww.wikidata.org%2Fwiki%2FSpecial%3AEntityData%2F%3E%0APREFIX+s%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+ref%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Freference%2F%3E%0APREFIX+v%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fvalue%2F%3E%0APREFIX+wdt%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect%2F%3E%0APREFIX+wdtn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect-normalized%2F%3E%0APREFIX+p%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2F%3E%0APREFIX+ps%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2F%3E%0APREFIX+psv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue%2F%3E%0APREFIX+psn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue-normalized%2F%3E%0APREFIX+pq%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2F%3E%0APREFIX+pqv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue%2F%3E%0APREFIX+pqn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue-normalized%2F%3E%0APREFIX+pr%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2F%3E%0APREFIX+prv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue%2F%3E%0APREFIX+prn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue-normalized%2F%3E%0APREFIX+wdno%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fnovalue%2F%3E%0APREFIX+imdb%3A+%3Chttps%3A%2F%2Fwww.imdb.com%2F%3E%0APREFIX+qfn%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Ffunction%23%3E%0APREFIX+ql%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Fbuiltin-functions%2F%3E%0ASELECT+%3Fqui_entity+%28SAMPLE%28%3Fname%29+as+%3Fqui_name%29+%28SAMPLE%28%3Falias%29+as+%3Fqui_alias%29+%28SAMPLE%28%3Fcount%29+as+%3Fqui_count%29+WHERE+%7B%0A++%7B+SELECT+%3Fqui_entity+%28COUNT%28%3Fqui_entity%29+AS+%3Fcount%29+WHERE+%7B%0A++++wd%3AQ90+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2FP47%3E+%3Fo+.+%3Fo+%3Fp+%3Fqui_entity+.%0A++%7D+GROUP+BY+%3Fqui_entity+%7D%0A++%0A++OPTIONAL+%7B+%3Fqui_entity+%40en%40rdfs%3Alabel+%3Fname+%7D%0A++BIND+%28%3Fqui_entity+AS+%3Falias%29%0A++%0A%7D+GROUP+BY+%3Fqui_entity+ORDER+BY+DESC%28%3Fqui_count%29%0ALIMIT+40%0AOFFSET+0&timeout=5000ms"
+            value += "SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {\n";
+            console.log("typeof", subject);
+            if (subject === undefined || Array.isArray(subject)) {
+                printContextSensitiveSuggestions([], "", {})
+                return;
+            } else if (verb === undefined) {
+                value +=
+                    `{ SELECT ?qui_entity (COUNT(DISTINCT ?${subject.value}) AS ?count) WHERE {\n` +
+                    previousTriplesString +
+                    `${subjectString} ?qui_entity ?qui_object }\n` +
+                    "GROUP BY ?qui_entity }\n" +
+                    "?qui_tmp_1 ?qui_tmp_2 ?qui_entity .\n" +
+                    "?qui_tmp_1 @en@rdfs:label ?name .\n" +
+                    "BIND (?name AS ?alias)\n"
+            } else {
+                let verbString = termToString(verb);
+                value +=
+                    "{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {\n" +
+                    previousTriplesString +
+                    `${subjectString} ${verbString} ?qui_entity .\n` +
+                    "} GROUP BY ?qui_entity }\n" +
+                    "OPTIONAL { ?qui_entity @en@rdfs:label ?name }\n" +
+                    "BIND (?qui_entity AS ?alias)\n"
+            }
+        }
+        value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
+            "LIMIT 40\n" +
+            "OFFSET 0"
+        response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query=" + encodeURIComponent(value))
+           .then(r => r.json());
+        if (currentCounter > lastQleverRequest) {
+            lastQleverRequest = currentCounter;
+            console.log("suggestions #" + currentCounter, response.results.bindings)
+            printContextSensitiveSuggestions(response.results.bindings, lastChars, prefixes);
+        }
+    }, 150);
 }
 
 function termToString (term) {
