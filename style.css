@@ -30,6 +30,7 @@ details {
     overflow: auto;
     max-height: 350px;
     display: inline-block;
+    vertical-align: top;
 }
 
 #suggestions {

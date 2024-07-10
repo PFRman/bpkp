@@ -17,7 +17,8 @@ export default function documentReady() {
     document.querySelector("#query-input").wrap = "hard";
 
     document.querySelector("#query-input").addEventListener("input", processQuery);
-    document.querySelector("#query-input").addEventListener("selectionchange", autoSuggestion);
+    // document.querySelector("#query-input").addEventListener("selectionchange", autoSuggestion);
+    document.querySelector("#query-input").addEventListener("input", autoSuggestion);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
     processQuery();
@@ -231,7 +232,7 @@ async function autoSuggestion () {
         col = getPreviousLineEndColumnNumber(sparqlInputElement);
         line = line - 1;
     }
-    let suggestions = getSuggestions(sparqlInput, [line, col]);
+    let suggestions = getSuggestions(sparqlInput, [line, col], lastChars);
     printSuggestions(suggestions, lastChars);
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
@@ -244,9 +245,10 @@ async function autoSuggestion () {
 /** Find fitting suggestions for the cursor position in a (potentially unfinished) query
  * @param {String} sparqlInput - the parser input
  * @param {[]} cursorPosition - the position of the cursor in the input field [line, col]
+ * @param {String} lastChars
  * @returns [String] - Array containing the suggestions
  */
-function getSuggestions (sparqlInput, cursorPosition) {
+function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     let expected = getExpected(sparqlInput);
     // console.log("expected: ", expected);
     let expectedAtCursor = expected[cursorPosition];
@@ -263,7 +265,7 @@ function getSuggestions (sparqlInput, cursorPosition) {
             // generatedTerminal = new RandExp(/[?$]\w/).gen();
             suggestions = vars.concat(["?"]);
         } else if (e === "PNAME_NS") {
-            suggestions = (prefixes.length > 0 ? prefixes : ["rdfs:"]);
+            suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
             suggestions = ["<"];
         } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
@@ -283,6 +285,7 @@ function getSuggestions (sparqlInput, cursorPosition) {
             otherSuggestions = otherSuggestions.concat(suggestions);
         //}
     }
+    otherSuggestions = otherSuggestions.filter(s => s.toLowerCase().startsWith(lastChars.toLowerCase()));
     return /*[completionSuggestions, */otherSuggestions/*]*/;
 }
 
@@ -363,6 +366,7 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
 let timeout = null;
 let qleverRequestCounter = 0;
 let lastQleverRequest = -1;
+
 /** Request wikidata entry suggestions from QLever and print them
  * */
 async function requestQleverSuggestions (sparqlInput, lastChars) {
