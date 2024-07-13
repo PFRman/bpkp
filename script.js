@@ -216,12 +216,12 @@ async function autoSuggestion () {
     if (/\S/.test(charBeforeCursor)) {
         let pos = sparqlInputElement.selectionStart - 1;
         let char = sparqlInput[pos];
-        while (/\S/.test(char) && pos > 0) {
+        while (/\S/.test(char) && pos >= 0) {
             pos -= 1;
             char = sparqlInput[pos];
         }
         lastChars = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
-        slicedInput = sparqlInput.slice(0, pos);
+        slicedInput = sparqlInput.slice(0, pos + 1);
         console.debug("lastChars:", lastChars);
         console.debug("slicedInput:", slicedInput);
     }
@@ -252,7 +252,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     let expected = getExpected(sparqlInput);
     // console.log("expected: ", expected);
     let expectedAtCursor = expected[cursorPosition];
-    // console.log("expectedAtCursor", [line, col], expectedAtCursor.slice());
+    // console.log("expectedAtCursor", cursorPosition, expectedAtCursor.slice());
     // let completionSuggestions = [];
     let otherSuggestions = [];
     const prefixes = Object.keys(getPrefixes(sparqlInput));
@@ -349,7 +349,8 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
         suggestionElement.addEventListener("click",
             function () {
                 let queryInput = document.querySelector("#query-input");
-                if (suggestion.qui_entity.type === "iri" && iri.startsWith("http://")) iri = "<" + iri + ">";
+                // todo deal with non-http-iris
+                if (suggestion.qui_entity.type === "uri" && iri.startsWith("http://")) iri = "<" + iri + ">";
                 else if (suggestion.qui_entity.type === "literal") iri = '"' + iri + '"';
                 queryInput.setRangeText(iri, queryInput.selectionStart - lastChars.length,
                     queryInput.selectionEnd, "end");
@@ -380,7 +381,8 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
         console.debug("starting timeout", timeout + ", request", currentCounter);
         try {
         let prefixes = getPrefixes(sparqlInput);
-        let value = "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+        let value = "";
+        let requestPrefixes= "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
 
         const vstack = getVStack(sparqlInput);
         console.log("vstack: ", vstack.slice());
@@ -406,10 +408,12 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
 
         // console.log("typeof", subject);
         if (subject === undefined || Array.isArray(subject) ) {
+            // subject suggestion
             if (lastChars.length > 2) {
-                value += "PREFIX wikibase: <http://wikiba.se/ontology#>\n" +
+                requestPrefixes += "PREFIX wikibase: <http://wikiba.se/ontology#>\n" +
                     "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n" +
-                    "PREFIX schema: <http://schema.org/>" +
+                    "PREFIX schema: <http://schema.org/>";
+                value +=
                     "SELECT ?qui_entity (SAMPLE(?name) AS ?qui_name) (SAMPLE(?alias) AS ?qui_alias) (SAMPLE(?sitelinks) AS ?qui_count) WHERE {\n" +
                     "  { SELECT ?qui_entity ?name ?alias WHERE {\n" +
                     "      ?qui_entity @en@rdfs:label ?name .\n" +
@@ -423,8 +427,10 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
         } else {
             value += "SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {\n";
             if (verb === undefined) {
+                // predicate suggestion
+                let x = (subject.termType === "Variable" ? `DISTINCT ?${subject.value}`: "?qui_object");
                 value +=
-                    `{ SELECT ?qui_entity (COUNT(DISTINCT ?${subject.value}) AS ?count) WHERE {\n` +
+                    `{ SELECT ?qui_entity (COUNT(${x}) AS ?count) WHERE {\n` +
                     previousTriplesString +
                     `${subjectString} ?qui_entity ?qui_object }\n` +
                     "GROUP BY ?qui_entity }\n" +
@@ -432,6 +438,7 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
                     "?qui_tmp_1 @en@rdfs:label ?name .\n" +
                     "BIND (?name AS ?alias)\n"
             } else {
+                // object suggestion
                 let verbString = termToString(verb);
                 value +=
                     "{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {\n" +
@@ -442,16 +449,20 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
                     "BIND (?qui_entity AS ?alias)\n"
             }
             if (lastChars.length > 0) {
-                value += `FILTER (REGEX(STR(?name), "${lastChars}", "i") || REGEX(STR(?alias), "${lastChars}", "i"))`
+                value += `FILTER (REGEX(STR(?name), "^${lastChars}", "i") || REGEX(STR(?alias), "^${lastChars}", "i"))`
             }
         }
         console.debug("lastChars", lastChars, lastChars.length);
         value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
-            "LIMIT 40\n" +
-            "OFFSET 0"
-        console.debug("request #" + currentCounter,  "to qlever backend:", value);
-        response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query=" + encodeURIComponent(value))
+            "LIMIT 40\n"
+            // + "OFFSET 0"
+        let requestQuery = requestPrefixes + value;
+        console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
+        response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
+            + encodeURIComponent(requestQuery))
            .then(r => r.json());
+        console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
+        console.debug(response);
         if (currentCounter > lastQleverRequest) {
             lastQleverRequest = currentCounter;
             console.log("suggestions #" + currentCounter, response.results.bindings)
