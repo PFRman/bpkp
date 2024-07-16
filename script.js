@@ -7,15 +7,37 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// todo: how to deal with whitespaces in strings in the triples?
+// todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
 
 let vars = [];
 let definedPrefixes = [];
 
+let SparqlParser = require('sparqljs').Parser;
+let parser = { // does it have to be global?
+    parser: new SparqlParser(),
+    accepted: false,
+    update(parseInput) {
+        try {
+            let results = this.parser.parse(parseInput);
+            this.result = results.result;
+            this.prefixes = results.result.prefixes;
+            this.vstack = [results.result];
+            this.expected = results.allExpected;
+            this.accepted = true;
+        } catch (e) {
+            if (e.hash === undefined) throw e;
+            this.result = undefined;
+            this.prefixes = e.hash.prefixes;
+            this.vstack = e.hash.vstack;
+            this.expected = e.hash.allExpected;
+            this.accepted = false;
+        }
+    }
+}
+
 export default function documentReady() {
     // hard wrap for the textarea, so that line counting works
     document.querySelector("#query-input").wrap = "hard";
-
     document.querySelector("#query-input").addEventListener("input", processQuery);
     // document.querySelector("#query-input").addEventListener("selectionchange", autoSuggestion);
     document.querySelector("#query-input").addEventListener("input", autoSuggestion);
@@ -111,7 +133,6 @@ async function processQuery() {
  * @returns the parser output */
 function sparqlJsParse (sparqlInput, silent = false) {
     console.log("SPARQL.js: ");
-    let SparqlParser = require('sparqljs').Parser;
     const parser = new SparqlParser();
     try {
         let startTime = performance.now();
@@ -132,47 +153,6 @@ function sparqlJsParse (sparqlInput, silent = false) {
             document.querySelector("#query-input").style.borderColor = "gray";
             console.log(e);
         }
-    }
-}
-
-/** Parse a SPARQL-query using the SPARQL.js module and get the expected terminals list for every position
- * @param {string} sparqlInput the parser input
- * @returns {object} An object of expected terminals arrays with line,col as keys */
-function getExpected (sparqlInput) {
-    let SparqlParser = require('sparqljs').Parser;
-    const parser = new SparqlParser();
-    try {
-        return parser.parse(sparqlInput).allExpected;
-    } catch (e) {
-        if (e.hash === undefined) throw e;
-        // console.log("e.hash: ", e.hash);
-        // console.log(requestQleverSuggestions(e.hash.vstack));
-        return e.hash.allExpected;
-    }
-}
-
-function getVStack (sparqlInput) {
-    let SparqlParser = require('sparqljs').Parser;
-    const parser = new SparqlParser();
-    try {
-        return [parser.parse(sparqlInput).result];
-    } catch (e) {
-        if (e.hash === undefined) throw e;
-        // console.log("e.hash: ", e.hash);
-        return e.hash.vstack;
-    }}
-
-/** Get the prefixes that are defined in the query
- * @param {string} sparqlInput the parser input
- * @returns {object} - the prefixes { "prefix" : "iri" } */
-function getPrefixes (sparqlInput) {
-    let SparqlParser = require('sparqljs').Parser;
-    const parser = new SparqlParser();
-    try {
-        return parser.parse(sparqlInput).result.prefixes;
-    } catch (e) {
-        if (e.hash === undefined) throw e;
-        return e.hash.prefixes;
     }
 }
 
@@ -232,12 +212,14 @@ async function autoSuggestion () {
         col = getPreviousLineEndColumnNumber(sparqlInputElement);
         line = line - 1;
     }
-    let suggestions = getSuggestions(sparqlInput, [line, col], lastChars);
+    parser.update(slicedInput);
+    console.debug("updated parser:", Object.assign({}, parser));
+    let suggestions = getSuggestions(sparqlInput, [line, col], lastChars); // is sparqlInput better than slicedInput?
     printSuggestions(suggestions, lastChars);
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
-    await requestQleverSuggestions(slicedInput, lastChars);
+    await requestQleverSuggestions(lastChars);
     sparqlInputElement.focus();
 }
 
@@ -249,13 +231,11 @@ async function autoSuggestion () {
  * @returns [String] - Array containing the suggestions
  */
 function getSuggestions (sparqlInput, cursorPosition, lastChars) {
-    let expected = getExpected(sparqlInput);
-    // console.log("expected: ", expected);
-    let expectedAtCursor = expected[cursorPosition];
+    let expectedAtCursor = parser.expected[cursorPosition];
     // console.log("expectedAtCursor", cursorPosition, expectedAtCursor.slice());
     // let completionSuggestions = [];
     let otherSuggestions = [];
-    const prefixes = Object.keys(getPrefixes(sparqlInput));
+    const prefixes = Object.keys(parser.prefixes);
     // let generatedInput;
     // const RandExp = require("randexp");
     if (expectedAtCursor === undefined) return [];
@@ -308,13 +288,13 @@ function printSuggestions (suggestions, lastChars, primary = false) {
         if (primary) suggestionElement.classList.add("primary-suggestion");
         suggestionElement.innerText = suggestion;
         suggestionElement.addEventListener("click",
-            function () {
+            async function () {
                 let queryInput = document.querySelector("#query-input");
                 queryInput.setRangeText(suggestion, queryInput.selectionStart - lastChars.length,
                     queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
-                autoSuggestion();
+                await autoSuggestion();
             });
         suggestionDiv.appendChild(suggestionElement);
     }
@@ -347,7 +327,7 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
         suggestionNameElement.style.fontWeight = "bold";
         suggestionNameElement.style.float = "right";
         suggestionElement.addEventListener("click",
-            function () {
+            async function () {
                 let queryInput = document.querySelector("#query-input");
                 // todo deal with non-http-iris
                 if (suggestion.qui_entity.type === "uri" && iri.startsWith("http://")) iri = "<" + iri + ">";
@@ -356,7 +336,7 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
                     queryInput.selectionEnd, "end");
                 document.querySelector("#query-input").focus();
                 suggestionDiv.innerHTML = "";
-                autoSuggestion();
+                await autoSuggestion();
             });
         suggestionElement.appendChild(suggestionUriElement);
         suggestionElement.appendChild(suggestionNameElement);
@@ -370,7 +350,7 @@ let lastQleverRequest = -1;
 
 /** Request wikidata entry suggestions from QLever and print them
  * */
-async function requestQleverSuggestions (sparqlInput, lastChars) {
+async function requestQleverSuggestions (lastChars) {
     let response;
     const currentCounter = qleverRequestCounter++;
     if (timeout !== null) {
@@ -380,94 +360,92 @@ async function requestQleverSuggestions (sparqlInput, lastChars) {
     timeout = setTimeout(async function () {
         console.debug("starting timeout", timeout + ", request", currentCounter);
         try {
-        let prefixes = getPrefixes(sparqlInput);
-        let value = "";
-        let requestPrefixes= "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
-
-        const vstack = getVStack(sparqlInput);
-        console.log("vstack: ", vstack.slice());
-        if (vstack.length < 8) {
-            printContextSensitiveSuggestions([], "", {})
-            return;
-        }
-        document.querySelector("#context-sensitive-suggestions").innerHTML =
-            '<img src="src/ajax-loader.gif" alt="loading...">';
-        const previousTriples = vstack[6];
-        // console.log(previousTriples);
-        let previousTriplesString = "";
-        for (let triple of previousTriples) {
-            // console.log(triple);
-            previousTriplesString +=
-                `${termToString(triple[0].subject)} ${termToString(triple[0].predicate)} ${termToString(triple[0].object)} .\n`;
-        }
-        const subject = vstack[7];
-        let subjectString = termToString(subject);
-        const verb = vstack[8];
-        // console.log("subject: ", subject, "\nverb: ", verb);
-        // "?query=PREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology-beta%23%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+wds%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0A%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0APREFIX+ontolex%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Flemon%2Fontolex%23%3E%0APREFIX+dct%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0APREFIX+schema%3A+%3Chttp%3A%2F%2Fschema.org%2F%3E%0APREFIX+cc%3A+%3Chttp%3A%2F%2Fcreativecommons.org%2Fns%23%3E%0APREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Font%2Fgeosparql%23%3E%0APREFIX+geof%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Fdef%2Ffunction%2Fgeosparql%2F%3E%0APREFIX+prov%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Fprov%23%3E%0APREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+data%3A+%3Chttps%3A%2F%2Fwww.wikidata.org%2Fwiki%2FSpecial%3AEntityData%2F%3E%0APREFIX+s%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+ref%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Freference%2F%3E%0APREFIX+v%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fvalue%2F%3E%0APREFIX+wdt%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect%2F%3E%0APREFIX+wdtn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect-normalized%2F%3E%0APREFIX+p%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2F%3E%0APREFIX+ps%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2F%3E%0APREFIX+psv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue%2F%3E%0APREFIX+psn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue-normalized%2F%3E%0APREFIX+pq%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2F%3E%0APREFIX+pqv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue%2F%3E%0APREFIX+pqn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue-normalized%2F%3E%0APREFIX+pr%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2F%3E%0APREFIX+prv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue%2F%3E%0APREFIX+prn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue-normalized%2F%3E%0APREFIX+wdno%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fnovalue%2F%3E%0APREFIX+imdb%3A+%3Chttps%3A%2F%2Fwww.imdb.com%2F%3E%0APREFIX+qfn%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Ffunction%23%3E%0APREFIX+ql%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Fbuiltin-functions%2F%3E%0ASELECT+%3Fqui_entity+%28SAMPLE%28%3Fname%29+as+%3Fqui_name%29+%28SAMPLE%28%3Falias%29+as+%3Fqui_alias%29+%28SAMPLE%28%3Fcount%29+as+%3Fqui_count%29+WHERE+%7B%0A++%7B+SELECT+%3Fqui_entity+%28COUNT%28%3Fqui_entity%29+AS+%3Fcount%29+WHERE+%7B%0A++++wd%3AQ90+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2FP47%3E+%3Fo+.+%3Fo+%3Fp+%3Fqui_entity+.%0A++%7D+GROUP+BY+%3Fqui_entity+%7D%0A++%0A++OPTIONAL+%7B+%3Fqui_entity+%40en%40rdfs%3Alabel+%3Fname+%7D%0A++BIND+%28%3Fqui_entity+AS+%3Falias%29%0A++%0A%7D+GROUP+BY+%3Fqui_entity+ORDER+BY+DESC%28%3Fqui_count%29%0ALIMIT+40%0AOFFSET+0&timeout=5000ms"
-
-        // console.log("typeof", subject);
-        if (subject === undefined || Array.isArray(subject) ) {
-            // subject suggestion
-            if (lastChars.length > 2) {
-                requestPrefixes += "PREFIX wikibase: <http://wikiba.se/ontology#>\n" +
-                    "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n" +
-                    "PREFIX schema: <http://schema.org/>";
-                value +=
-                    "SELECT ?qui_entity (SAMPLE(?name) AS ?qui_name) (SAMPLE(?alias) AS ?qui_alias) (SAMPLE(?sitelinks) AS ?qui_count) WHERE {\n" +
-                    "  { SELECT ?qui_entity ?name ?alias WHERE {\n" +
-                    "      ?qui_entity @en@rdfs:label ?name .\n" +
-                    "      ?qui_entity @en@skos:altLabel ?alias .\n" +
-                    `      FILTER (REGEX(STR(?name), "^${lastChars}") || REGEX(STR(?alias), "^${lastChars}")) } }\n` +
-                    "  ?qui_entity ^schema:about ?m . ?m wikibase:sitelinks ?sitelinks\n"
-            } else {
-                printContextSensitiveSuggestions([], "", {});
+            let value = "";
+            let requestPrefixes= "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+            const vstack = parser.vstack;
+            console.log("vstack: ", vstack.slice());
+            if (vstack.length < 8) {
+                printContextSensitiveSuggestions([], "", {})
                 return;
             }
-        } else {
-            value += "SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {\n";
-            if (verb === undefined) {
-                // predicate suggestion
-                let x = (subject.termType === "Variable" ? `DISTINCT ?${subject.value}`: "?qui_object");
-                value +=
-                    `{ SELECT ?qui_entity (COUNT(${x}) AS ?count) WHERE {\n` +
-                    previousTriplesString +
-                    `${subjectString} ?qui_entity ?qui_object }\n` +
-                    "GROUP BY ?qui_entity }\n" +
-                    "?qui_tmp_1 ?qui_tmp_2 ?qui_entity .\n" +
-                    "?qui_tmp_1 @en@rdfs:label ?name .\n" +
-                    "BIND (?name AS ?alias)\n"
+            document.querySelector("#context-sensitive-suggestions").innerHTML =
+                '<img src="src/ajax-loader.gif" alt="loading...">';
+            const previousTriples = vstack[6];
+            // console.log(previousTriples);
+            let previousTriplesString = "";
+            for (let triple of previousTriples) {
+                // console.log(triple);
+                previousTriplesString +=
+                    `${termToString(triple[0].subject)} ${termToString(triple[0].predicate)} ${termToString(triple[0].object)} .\n`;
+            }
+            const subject = vstack[7];
+            let subjectString = termToString(subject);
+            const verb = vstack[8];
+            // console.log("subject: ", subject, "\nverb: ", verb);
+            // "?query=PREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology-beta%23%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+wds%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0A%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0APREFIX+ontolex%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Flemon%2Fontolex%23%3E%0APREFIX+dct%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0APREFIX+schema%3A+%3Chttp%3A%2F%2Fschema.org%2F%3E%0APREFIX+cc%3A+%3Chttp%3A%2F%2Fcreativecommons.org%2Fns%23%3E%0APREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Font%2Fgeosparql%23%3E%0APREFIX+geof%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Fdef%2Ffunction%2Fgeosparql%2F%3E%0APREFIX+prov%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Fprov%23%3E%0APREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+data%3A+%3Chttps%3A%2F%2Fwww.wikidata.org%2Fwiki%2FSpecial%3AEntityData%2F%3E%0APREFIX+s%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+ref%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Freference%2F%3E%0APREFIX+v%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fvalue%2F%3E%0APREFIX+wdt%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect%2F%3E%0APREFIX+wdtn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect-normalized%2F%3E%0APREFIX+p%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2F%3E%0APREFIX+ps%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2F%3E%0APREFIX+psv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue%2F%3E%0APREFIX+psn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue-normalized%2F%3E%0APREFIX+pq%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2F%3E%0APREFIX+pqv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue%2F%3E%0APREFIX+pqn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue-normalized%2F%3E%0APREFIX+pr%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2F%3E%0APREFIX+prv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue%2F%3E%0APREFIX+prn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue-normalized%2F%3E%0APREFIX+wdno%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fnovalue%2F%3E%0APREFIX+imdb%3A+%3Chttps%3A%2F%2Fwww.imdb.com%2F%3E%0APREFIX+qfn%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Ffunction%23%3E%0APREFIX+ql%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Fbuiltin-functions%2F%3E%0ASELECT+%3Fqui_entity+%28SAMPLE%28%3Fname%29+as+%3Fqui_name%29+%28SAMPLE%28%3Falias%29+as+%3Fqui_alias%29+%28SAMPLE%28%3Fcount%29+as+%3Fqui_count%29+WHERE+%7B%0A++%7B+SELECT+%3Fqui_entity+%28COUNT%28%3Fqui_entity%29+AS+%3Fcount%29+WHERE+%7B%0A++++wd%3AQ90+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2FP47%3E+%3Fo+.+%3Fo+%3Fp+%3Fqui_entity+.%0A++%7D+GROUP+BY+%3Fqui_entity+%7D%0A++%0A++OPTIONAL+%7B+%3Fqui_entity+%40en%40rdfs%3Alabel+%3Fname+%7D%0A++BIND+%28%3Fqui_entity+AS+%3Falias%29%0A++%0A%7D+GROUP+BY+%3Fqui_entity+ORDER+BY+DESC%28%3Fqui_count%29%0ALIMIT+40%0AOFFSET+0&timeout=5000ms"
+
+            // console.log("typeof", subject);
+            if (subject === undefined || Array.isArray(subject) ) {
+                // subject suggestion
+                if (lastChars.length > 2) {
+                    requestPrefixes += "PREFIX wikibase: <http://wikiba.se/ontology#>\n" +
+                        "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n" +
+                        "PREFIX schema: <http://schema.org/>";
+                    value +=
+                        "SELECT ?qui_entity (SAMPLE(?name) AS ?qui_name) (SAMPLE(?alias) AS ?qui_alias) (SAMPLE(?sitelinks) AS ?qui_count) WHERE {\n" +
+                        "  { SELECT ?qui_entity ?name ?alias WHERE {\n" +
+                        "      ?qui_entity @en@rdfs:label ?name .\n" +
+                        "      ?qui_entity @en@skos:altLabel ?alias .\n" +
+                        `      FILTER (REGEX(STR(?name), "^${lastChars}") || REGEX(STR(?alias), "^${lastChars}")) } }\n` +
+                        "  ?qui_entity ^schema:about ?m . ?m wikibase:sitelinks ?sitelinks\n"
+                } else {
+                    printContextSensitiveSuggestions([], "", {});
+                    return;
+                }
             } else {
-                // object suggestion
-                let verbString = termToString(verb);
-                value +=
-                    "{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {\n" +
-                    previousTriplesString +
-                    `${subjectString} ${verbString} ?qui_entity .\n` +
-                    "} GROUP BY ?qui_entity }\n" +
-                    "OPTIONAL { ?qui_entity @en@rdfs:label ?name }\n" +
-                    "BIND (?qui_entity AS ?alias)\n"
+                value += "SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {\n";
+                if (verb === undefined) {
+                    // predicate suggestion
+                    let x = (subject.termType === "Variable" ? `DISTINCT ?${subject.value}`: "?qui_object");
+                    value +=
+                        `{ SELECT ?qui_entity (COUNT(${x}) AS ?count) WHERE {\n` +
+                        previousTriplesString +
+                        `${subjectString} ?qui_entity ?qui_object }\n` +
+                        "GROUP BY ?qui_entity }\n" +
+                        "?qui_tmp_1 ?qui_tmp_2 ?qui_entity .\n" +
+                        "?qui_tmp_1 @en@rdfs:label ?name .\n" +
+                        "BIND (?name AS ?alias)\n"
+                } else {
+                    // object suggestion
+                    let verbString = termToString(verb);
+                    value +=
+                        "{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {\n" +
+                        previousTriplesString +
+                        `${subjectString} ${verbString} ?qui_entity .\n` +
+                        "} GROUP BY ?qui_entity }\n" +
+                        "OPTIONAL { ?qui_entity @en@rdfs:label ?name }\n" +
+                        "BIND (?qui_entity AS ?alias)\n"
+                }
+                if (lastChars.length > 0) {
+                    value += `FILTER (REGEX(STR(?name), "^${lastChars}", "i") || REGEX(STR(?alias), "^${lastChars}", "i"))`
+                }
             }
-            if (lastChars.length > 0) {
-                value += `FILTER (REGEX(STR(?name), "^${lastChars}", "i") || REGEX(STR(?alias), "^${lastChars}", "i"))`
+            console.debug("lastChars", lastChars, lastChars.length);
+            value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
+                "LIMIT 40\n"
+                // + "OFFSET 0"
+            let requestQuery = requestPrefixes + value;
+            console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
+            response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
+                + encodeURIComponent(requestQuery))
+               .then(r => r.json());
+            console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
+            console.debug(response);
+            if (currentCounter > lastQleverRequest) {
+                lastQleverRequest = currentCounter;
+                console.log("suggestions #" + currentCounter, response.results.bindings)
+                printContextSensitiveSuggestions(response.results.bindings, lastChars, parser.prefixes);
             }
-        }
-        console.debug("lastChars", lastChars, lastChars.length);
-        value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
-            "LIMIT 40\n"
-            // + "OFFSET 0"
-        let requestQuery = requestPrefixes + value;
-        console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
-        response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
-            + encodeURIComponent(requestQuery))
-           .then(r => r.json());
-        console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
-        console.debug(response);
-        if (currentCounter > lastQleverRequest) {
-            lastQleverRequest = currentCounter;
-            console.log("suggestions #" + currentCounter, response.results.bindings)
-            printContextSensitiveSuggestions(response.results.bindings, lastChars, prefixes);
-        }
         } catch (e) {
             printContextSensitiveSuggestions([], "", {});
             console.log(e);
