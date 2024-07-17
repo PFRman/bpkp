@@ -454,14 +454,25 @@ async function requestQleverSuggestions (lastChars) {
 }
 
 function termToString (term) {
-    let termString = term.value;
-    switch (term.termType) {
-        case "Variable":
-            termString = "?" + termString;
-            break;
-        case "NamedNode":
-            termString = "<" +  termString + ">";
-            break;
+    let termString;
+    console.debug("term:", term);
+    if (term.type && term.type === "path") {
+        console.log("pathType:", term.pathType);
+        if (term.pathType === "/"){
+            termString = term.items.map(termToString).join("/");
+        } else {
+            termString = term.items.map(termToString).join("") + term.pathType;
+        }
+        console.log("path:", termString);
+    } else {
+        switch (term.termType) {
+            case "Variable":
+                termString = "?" + term.value;
+                break;
+            case "NamedNode":
+                termString = "<" + term.value + ">";
+                break;
+        }
     }
     return termString;
 }
