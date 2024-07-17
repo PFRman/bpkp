@@ -9,6 +9,8 @@ const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
 
+const WHITESPACETOKEN = true;
+
 let vars = [];
 let definedPrefixes = [];
 
@@ -30,6 +32,7 @@ let parser = { // does it have to be global?
             this.prefixes = e.hash.prefixes;
             this.vstack = e.hash.vstack;
             this.expected = e.hash.allExpected;
+            this.errorpos = e.hash.pos;
             this.accepted = false;
         }
     }
@@ -190,21 +193,28 @@ async function autoSuggestion () {
     // console.log("autoSuggestion:");
     let sparqlInputElement = document.querySelector("#query-input");
     const sparqlInput = sparqlInputElement.value;
-    let slicedInput = sparqlInput.slice(0, sparqlInputElement.selectionStart);
-    const charBeforeCursor = slicedInput.slice(-1);
-    let lastChars = "";
-    if (/\S/.test(charBeforeCursor)) {
-        let pos = sparqlInputElement.selectionStart - 1;
-        let char = sparqlInput[pos];
-        while (/\S/.test(char) && pos >= 0) {
-            pos -= 1;
-            char = sparqlInput[pos];
+    parser.update(sparqlInput);
+    let slicedInput;
+    let charsBeforeCursor = "";
+    if (!WHITESPACETOKEN && !parser.accepted) {
+        slicedInput = sparqlInput.slice(0, parser.errorpos);
+        charsBeforeCursor = sparqlInput.slice(parser.errorpos, sparqlInputElement.selectionStart);
+    } else {
+        slicedInput = sparqlInput.slice(0, sparqlInputElement.selectionStart);
+        const charBeforeCursor = slicedInput.slice(-1);
+        if (/\S/.test(charBeforeCursor)) {
+            let pos = sparqlInputElement.selectionStart - 1;
+            let char = sparqlInput[pos];
+            while (/\S/.test(char) && pos >= 0) {
+                pos -= 1;
+                char = sparqlInput[pos];
+            }
+            charsBeforeCursor = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
+            slicedInput = sparqlInput.slice(0, pos + 1);
         }
-        lastChars = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
-        slicedInput = sparqlInput.slice(0, pos + 1);
-        console.debug("lastChars:", lastChars);
-        console.debug("slicedInput:", slicedInput);
     }
+    console.debug('charsBeforeCursor: "' + charsBeforeCursor + '"');
+    console.debug('slicedInput: "' + slicedInput + '"');
     let col = slicedInput.split("\n").at(-1).trimEnd().length;
     let line = slicedInput.split("\n").length; // 1-based (like parser)
     // skip blank lines
@@ -214,12 +224,12 @@ async function autoSuggestion () {
     }
     parser.update(slicedInput);
     console.debug("updated parser:", Object.assign({}, parser));
-    let suggestions = getSuggestions(sparqlInput, [line, col], lastChars); // is sparqlInput better than slicedInput?
-    printSuggestions(suggestions, lastChars);
+    let suggestions = getSuggestions(sparqlInput, [line, col], charsBeforeCursor); // is sparqlInput better than slicedInput?
+    printSuggestions(suggestions, charsBeforeCursor);
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
-    await requestQleverSuggestions(lastChars);
+    await requestQleverSuggestions(charsBeforeCursor);
     sparqlInputElement.focus();
 }
 
@@ -455,15 +465,12 @@ async function requestQleverSuggestions (lastChars) {
 
 function termToString (term) {
     let termString;
-    console.debug("term:", term);
     if (term.type && term.type === "path") {
-        console.log("pathType:", term.pathType);
         if (term.pathType === "/"){
             termString = term.items.map(termToString).join("/");
         } else {
             termString = term.items.map(termToString).join("") + term.pathType;
         }
-        console.log("path:", termString);
     } else {
         switch (term.termType) {
             case "Variable":
