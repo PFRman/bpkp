@@ -1480,6 +1480,7 @@ case 1:
       Parser.base = '';
       $$[$0-1].prefixes = Parser.prefixes;
       Parser.prefixes = null;
+      Parser.contextTriples = null;
 
       if (Parser.pathOnly) {
         if ($$[$0-1].type === 'path' || 'termType' in $$[$0-1]) {
@@ -1810,6 +1811,7 @@ this.$ = { type: 'functionCall', args: appendTo($$[$0-2], $$[$0-1]), distinct: !
 break;
 case 98: case 115: case 128: case 247: case 249: case 251: case 253: case 255: case 263: case 267: case 297: case 299: case 303: case 307: case 328: case 341: case 349: case 355: case 361: case 367: case 369: case 373: case 375: case 379: case 381: case 385: case 391: case 395: case 401: case 405: case 409: case 411: case 420: case 428: case 430: case 440: case 444: case 446: case 448:
 this.$ = [];
+// console.debug(yystate, $$.slice());
 break;
 case 99:
 this.$ = appendTo($$[$0-2], $$[$0-1]);
@@ -1819,6 +1821,8 @@ this.$ = unionAll($$[$0-2], [$$[$0-1]]);
 break;
 case 102: case 112:
 this.$ = applyAnnotations($$[$0].map(t => extend(triple($$[$0-1]), t)));
+if (!Parser.contextTriples) Parser.contextTriples = [];
+Parser.contextTriples = Parser.contextTriples.concat(this.$);
 break;
 case 103:
 this.$ = applyAnnotations(appendAllTo($$[$0].map(t => extend(triple($$[$0-1].entity), t)), $$[$0-1].triples)) /* the subject is a blank node, possibly with more triples */;
@@ -2041,6 +2045,7 @@ $$[$0-3].push($$[$0-2]);
 break;
 case 350: case 362: case 376: case 380: case 382: case 386: case 396: case 406: case 410: case 412: case 421:
 $$[$0-2].push($$[$0-1]);
+// console.debug(yystate, $$.slice());
 break;
 }
 },
@@ -2096,6 +2101,7 @@ parse: function parse(input) {
     var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
     let allExpected = {};
     let allExpectedTerminals = {};
+    Parser.contextTriples = null;
     // console.log(table)
     while (true) {
         state = stack[stack.length - 1];
@@ -2135,7 +2141,7 @@ parse: function parse(input) {
                 symbol = lex();
             }
             action = table[state] && table[state][symbol];
-            // console.log("symbol: ", symbol);
+            // console.log("symbol: ", this.invertedSymbols[symbol], `${symbol}`);
             // console.log("action: ", action);
         }
                     if (typeof action === 'undefined' || !action.length || !action[0]) {
@@ -2156,10 +2162,11 @@ parse: function parse(input) {
                     token: this.terminals_[symbol] || symbol,
                     line: lexer.yylineno,
                     loc: yyloc,
-                    pos: lexer.matched.length - 1,
+                    matched: lexer.matched,
                     expected: expected,
                     allExpected: allExpected,
                     vstack: vstack,
+                    contextTriples: Parser.contextTriples,
                     prefixes: Parser.prefixes ? Parser.prefixes : {},
                 });
             }

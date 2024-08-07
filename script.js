@@ -32,7 +32,8 @@ let parser = { // does it have to be global?
             this.prefixes = e.hash.prefixes;
             this.vstack = e.hash.vstack;
             this.expected = e.hash.allExpected;
-            this.errorpos = e.hash.pos;
+            this.errorpos = e.hash.matched.length - 1;
+            this.contextTriples = e.hash.contextTriples;
             this.accepted = false;
         }
     }
@@ -380,13 +381,15 @@ async function requestQleverSuggestions (lastChars) {
             }
             document.querySelector("#context-sensitive-suggestions").innerHTML =
                 '<img src="src/ajax-loader.gif" alt="loading...">';
-            const previousTriples = vstack[6];
-            // console.log(previousTriples);
+            // const previousTriples = vstack[6];
+            const previousTriples = parser.contextTriples;
+            console.log("previousTriples:", previousTriples);
+            console.log("previousTriples (vstack):", vstack[6]);
             let previousTriplesString = "";
             for (let triple of previousTriples) {
                 // console.log(triple);
                 previousTriplesString +=
-                    `${termToString(triple[0].subject)} ${termToString(triple[0].predicate)} ${termToString(triple[0].object)} .\n`;
+                    `${termToString(triple.subject)} ${termToString(triple.predicate)} ${termToString(triple.object)} .\n`;
             }
             const subject = vstack[7];
             let subjectString = termToString(subject);
@@ -445,12 +448,12 @@ async function requestQleverSuggestions (lastChars) {
                 "LIMIT 40\n"
                 // + "OFFSET 0"
             let requestQuery = requestPrefixes + value;
-            console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
+            // console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
             response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
                 + encodeURIComponent(requestQuery))
                .then(r => r.json());
-            console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
-            console.debug(response);
+            // console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
+            // console.debug(response);
             if (currentCounter > lastQleverRequest) {
                 lastQleverRequest = currentCounter;
                 console.log("suggestions #" + currentCounter, response.results.bindings)
