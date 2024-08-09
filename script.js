@@ -9,7 +9,6 @@ const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
 
-const WHITESPACETOKEN = true;
 
 let vars = [];
 let definedPrefixes = [];
@@ -32,7 +31,7 @@ let parser = { // does it have to be global?
             this.prefixes = e.hash.prefixes;
             this.vstack = e.hash.vstack;
             this.expected = e.hash.allExpected;
-            this.errorpos = e.hash.matched.length - 1;
+            this.errorpos = e.hash.matched.length - e.hash.text.length;
             this.contextTriples = e.hash.contextTriples;
             this.accepted = false;
         }
@@ -196,25 +195,23 @@ async function autoSuggestion () {
     const sparqlInput = sparqlInputElement.value;
     parser.update(sparqlInput);
     let slicedInput;
-    let charsBeforeCursor = "";
-    if (!WHITESPACETOKEN && !parser.accepted) {
-        slicedInput = sparqlInput.slice(0, parser.errorpos);
-        charsBeforeCursor = sparqlInput.slice(parser.errorpos, sparqlInputElement.selectionStart);
-    } else {
-        slicedInput = sparqlInput.slice(0, sparqlInputElement.selectionStart);
-        const charBeforeCursor = slicedInput.slice(-1);
-        if (/\S/.test(charBeforeCursor)) {
-            let pos = sparqlInputElement.selectionStart - 1;
-            let char = sparqlInput[pos];
-            while (/\S/.test(char) && pos >= 0) {
-                pos -= 1;
-                char = sparqlInput[pos];
-            }
-            charsBeforeCursor = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
-            slicedInput = sparqlInput.slice(0, pos + 1);
-        }
+    let lastCharsBeforeCursor = "";
+    let pos = sparqlInputElement.selectionStart;
+    let char = sparqlInput[pos];
+    while (/\S/.test(char) && pos >= 0) {
+        pos -= 1;
+        char = sparqlInput[pos];
     }
-    console.debug('charsBeforeCursor: "' + charsBeforeCursor + '"');
+    console.log("pos:", pos);
+    console.log("errorpos:", parser.errorpos)
+    if (!parser.accepted && parser.errorpos < pos) {
+        slicedInput = sparqlInput.slice(0, parser.errorpos);
+        lastCharsBeforeCursor = sparqlInput.slice(parser.errorpos, sparqlInputElement.selectionStart);
+    } else {
+        slicedInput = sparqlInput.slice(0, pos + 1);
+        lastCharsBeforeCursor = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
+    }
+    console.debug('lastCharsBeforeCursor: "' + lastCharsBeforeCursor + '"');
     console.debug('slicedInput: "' + slicedInput + '"');
     let col = slicedInput.split("\n").at(-1).trimEnd().length;
     let line = slicedInput.split("\n").length; // 1-based (like parser)
@@ -225,12 +222,12 @@ async function autoSuggestion () {
     }
     parser.update(slicedInput);
     console.debug("updated parser:", Object.assign({}, parser));
-    let suggestions = getSuggestions(sparqlInput, [line, col], charsBeforeCursor); // is sparqlInput better than slicedInput?
-    printSuggestions(suggestions, charsBeforeCursor);
+    let suggestions = getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
+    printSuggestions(suggestions, lastCharsBeforeCursor);
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
-    await requestQleverSuggestions(charsBeforeCursor);
+    await requestQleverSuggestions(lastCharsBeforeCursor);
     sparqlInputElement.focus();
 }
 
