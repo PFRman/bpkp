@@ -32,7 +32,7 @@ let parser = { // does it have to be global?
             this.vstack = e.hash.vstack;
             this.expected = e.hash.allExpected;
             this.errorpos = e.hash.matched.length - e.hash.text.length;
-            this.contextTriples = e.hash.contextTriples;
+            this.contextTriples = e.hash.contextTriples ? e.hash.contextTriples : [];
             this.accepted = false;
         }
     }
