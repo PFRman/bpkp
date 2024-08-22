@@ -72,14 +72,17 @@ a {
 }
 
 textarea {
-    width: 670px;
-    height: 200px;
     border: 1px solid dimgray;
     /* border-radius: 18px; */
     padding: 10px 15px;
     background-color: #333;
     color: #eee;
     resize: none;
+}
+
+#query-input {
+    width: 670px;
+    height: 200px;
 }
 
 textarea:focus-visible {

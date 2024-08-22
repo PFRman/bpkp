@@ -6,6 +6,7 @@
     <link rel="stylesheet" type="text/css" href="style.css">
     <link rel="modulepreload" href="script.js">
     <script src="src/library.js"></script>
+    <script src="src/tree-sitter.js"></script>
     <script type="module" src="script.js"></script>
 </head>
 <body>
@@ -20,6 +21,10 @@
         </div>
         <div id="context-sensitive-suggestions"></div>
         <p>
+            <label>
+                <input type="checkbox" id="treeSitterToggle">
+                tree-sitter parser
+            </label>
             <label>
                 <input type="checkbox" id="sparqlJsToggle" checked>
                 SPARQL.js parser
@@ -47,6 +52,17 @@
                 <p>Non-variables: <span id="nvocc"></span></p>
             </div>
         </details>
+        <div>
+            <details>
+                <summary>Output of tree-sitter parser:</summary>
+                <br>
+                <div id="treeSitterOutput"></div>
+                <br>
+                <label for="treeSitterQuery">Query these results:</label><br>
+                <textarea id="treeSitterQuery"></textarea>
+                <div id="treeSitterQueryResults"></div>
+            </details>
+        </div>
         <div>
             <details>
                 <summary>Output of SPARQL.js parser:</summary>

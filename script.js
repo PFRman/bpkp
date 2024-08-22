@@ -37,6 +37,7 @@ let parser = { // does it have to be global?
         }
     }
 }
+let tree, sparqlL;
 
 export default function documentReady() {
     // hard wrap for the textarea, so that line counting works
@@ -46,6 +47,8 @@ export default function documentReady() {
     document.querySelector("#query-input").addEventListener("input", autoSuggestion);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
+    document.querySelector("#treeSitterToggle").addEventListener("change", processQuery);
+    document.querySelector("#treeSitterQuery").addEventListener("input", treeSitterQuery);
     processQuery();
     // autoSuggestion();
 }
@@ -122,6 +125,9 @@ async function processQuery() {
     document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
+    // using tree-sitter SPARQL-parser
+    if (document.querySelector("#treeSitterToggle").checked) await treeSitterParse(sparqlInput);
+
     // using Jison-generated SPARQL-parser
     if (document.querySelector("#sparqlJsToggle").checked) /*console.log(
         "sparqlJsParse result:", */sparqlJsParse(sparqlInput);
@@ -186,6 +192,30 @@ async function textUtilsParse (sparqlInput) {
             console.log(e);
         }
     });
+}
+
+async function treeSitterParse (sparqlInput) {
+    const Parser = window.TreeSitter;
+    await Parser.init().then(() => {
+        console.debug("tree-sitter library ready")
+    });
+    console.debug("creating parser");
+    const parser = new Parser;
+    sparqlL = await Parser.Language.load('src/tree-sitter-sparql.wasm');
+    parser.setLanguage(sparqlL);
+    tree = parser.parse(sparqlInput);
+    document.querySelector("#treeSitterOutput").textContent = tree.rootNode.toString();
+}
+
+function treeSitterQuery () {
+    const queryInput = document.querySelector("#treeSitterQuery").value;
+    const query = sparqlL.query(queryInput);
+    const captures = query.captures(tree.rootNode);
+    let output = "";
+    captures.forEach(capture => {
+        output += `${capture.name} ${capture.node.text} \n`;
+    })
+    document.querySelector("#treeSitterQueryResults").innerText = output;
 }
 
 /** Find fitting suggestions for the cursor position and print them */
