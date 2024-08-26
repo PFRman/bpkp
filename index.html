@@ -36,7 +36,7 @@
         </p>
     </div>
     <div id="result">
-        <details open>
+        <details>
             <summary>syntax highlighted</summary>
             <p id="text"></p>
         </details>
@@ -53,20 +53,20 @@
             </div>
         </details>
         <div>
-            <details>
+            <details open>
                 <summary>Output of tree-sitter parser:</summary>
                 <br>
-                <div id="treeSitterOutput"></div>
+                <div id="treeSitterOutput" class="output"></div>
                 <br>
                 <label for="treeSitterQuery">Query these results:</label><br>
                 <textarea id="treeSitterQuery"></textarea>
-                <div id="treeSitterQueryResults"></div>
+                <table id="treeSitterQueryResults" class="output"></table>
             </details>
         </div>
         <div>
             <details>
                 <summary>Output of SPARQL.js parser:</summary>
-                <div id="sparqlJsOutput"></div>
+                <div id="sparqlJsOutput" class="output"></div>
             </details>
         </div>
         <div>

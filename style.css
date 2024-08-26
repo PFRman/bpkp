@@ -13,6 +13,10 @@ details {
     font-family: monospace;
 }
 
+.output {
+    font-family: monospace;
+}
+
 .keyword {
     color: #a236ef;
 }
@@ -28,7 +32,7 @@ details {
 
 #suggestions, #context-sensitive-suggestions {
     overflow: auto;
-    max-height: 350px;
+    max-height: 150px;
     display: inline-block;
     vertical-align: top;
 }
@@ -83,6 +87,11 @@ textarea {
 #query-input {
     width: 670px;
     height: 200px;
+}
+
+#treeSitterQuery {
+    width: 500px;
+    height: 100px;
 }
 
 textarea:focus-visible {
