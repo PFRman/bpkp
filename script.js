@@ -260,11 +260,44 @@ async function treeSitterContext () {
     console.debug(`tree-sitter previous captures`, triplesCaptures.map(t => t.node.text));
     // triplesCaptures.forEach(triple => console.debug(triple.node.text));
     console.debug(`subject`, subject?.node.type, `predicate`, predicate?.node.type);
+    const filteredTriples = filterContext(triplesCaptures, subject, predicate);
     return {
-        triples: triplesCaptures,
+        triples: filteredTriples,
         subject: subject,
         predicate: predicate,
     }
+}
+
+export function filterContext (triples, subject, predicate) {
+    if (subject?.node.type !== "var" && predicate?.node.type !== "var") {
+        return [];
+    }
+    let vars = new Set();
+    let triplesToCheck = triples.slice();
+    let contextTriples = []
+    if (subject?.node.type === "var") vars.add(subject.node.text);
+    if (predicate?.node.type === "var") vars.add(predicate.node.text);
+
+    let c = 0;
+    while (triplesToCheck.length > 0 && c < triples.length) {
+        let freeTriples = [];
+        for (const triple of triplesToCheck) {
+            let query = tSParser.sparql.query(`(triples_same_subject
+                (var)? @svar  
+                (_(_(var)? @pvar 
+                (_ (var)? @ovar))) )`);
+            let tripleVars = query.captures(triple.node).map(v => v.node.text);
+            if (tripleVars.some(v => vars.has(v))) {
+                tripleVars.forEach(v => vars.add(v));
+                contextTriples.push(triple);
+            } else {
+                freeTriples.push(triple);
+            }
+        }
+        triplesToCheck = freeTriples.slice();
+        c++;
+    }
+    return contextTriples;
 }
 
 /** Find fitting suggestions for the cursor position and print them */
@@ -451,7 +484,7 @@ async function requestQleverSuggestions (lastChars) {
             let value = "";
             let requestPrefixes= "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
             for (const prefix in sJSparser.prefixes) {
-                requestPrefixes += `PREFIX ${prefix}: <${sJSparser.prefixes[prefix]}>`;
+                requestPrefixes += `PREFIX ${prefix}: <${sJSparser.prefixes[prefix]}>\n`;
             }
             const vstack = sJSparser.vstack;
             console.log("vstack: ", vstack.slice());
