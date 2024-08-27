@@ -7,7 +7,7 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
+// todo: how to deal with whitespaces in strings (syntax highlighting)?
 
 const QLEVER_TIMEOUT = 5000;
 
@@ -240,7 +240,7 @@ function escape (str) {
 
 async function treeSitterContext () {
     const triplesQuery = tSParser.sparql.query(
-        `(triples_same_subject) @triples`
+        `(ERROR (triples_same_subject) @triples)`
     )
     const subjectQuery = tSParser.sparql.query(
         `(ERROR [(var) (rdf_literal) (boolean_literal) (nil) (iri_reference) (prefixed_name) (integer) (decimal) (double) (blank_node_label) (anon)] @subject)`);
