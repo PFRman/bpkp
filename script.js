@@ -10,7 +10,6 @@ new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
 
 
-let vars = [];
 let definedPrefixes = [];
 
 let SparqlParser = require('sparqljs').Parser;
@@ -135,7 +134,7 @@ async function processQuery() {
         else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
         else nonVars.push(`t${t}.object="${obj}"`);
     }
-    vars = Object.keys(occurrences);
+    // vars = Object.keys(occurrences);
     document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
@@ -307,7 +306,7 @@ async function autoSuggestion () {
     const sparqlInput = sparqlInputElement.value.slice(0, sparqlInputElement.selectionStart);
     sJSparser.update(sparqlInput);
     let slicedInput;
-    let lastCharsBeforeCursor = "";
+    let lastCharsBeforeCursor;
     let pos = sparqlInputElement.selectionStart;
     let char = sparqlInput[pos];
     while (/\S/.test(char) && pos >= 0) {
@@ -357,6 +356,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     // let completionSuggestions = [];
     let otherSuggestions = [];
     const prefixes = Object.keys(sJSparser.prefixes);
+    const vars = tSParser.sparql.query(`(var) @var`).captures(tSParser.tree.rootNode);
     // let generatedInput;
     // const RandExp = require("randexp");
     if (expectedAtCursor === undefined) return [];
@@ -364,7 +364,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
         let suggestions = [];
         if (e === "VAR") {
             // generatedTerminal = new RandExp(/[?$]\w/).gen();
-            suggestions = vars.concat(["?"]);
+            suggestions = Array.from(new Set(vars.map(v => v.node.text).concat(["?"])));
         } else if (e === "PNAME_NS") {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
@@ -410,10 +410,10 @@ function printSuggestions (suggestions, lastChars, primary = false) {
         suggestionElement.innerText = suggestion;
         suggestionElement.addEventListener("click",
             async function () {
-                let queryInput = document.querySelector("#query-input");
-                queryInput.setRangeText(suggestion, queryInput.selectionStart - lastChars.length,
-                    queryInput.selectionEnd, "end");
-                document.querySelector("#query-input").focus();
+                let queryInputElement = document.querySelector("#query-input");
+                queryInputElement.setRangeText(suggestion, queryInputElement.selectionStart - lastChars.length,
+                    queryInputElement.selectionEnd, "end");
+                queryInputElement.focus();
                 suggestionDiv.innerHTML = "";
                 await autoSuggestion();
             });
@@ -449,13 +449,13 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
         suggestionNameElement.style.float = "right";
         suggestionElement.addEventListener("click",
             async function () {
-                let queryInput = document.querySelector("#query-input");
+                let queryInputElement = document.querySelector("#query-input");
                 // todo deal with non-http-iris
                 if (suggestion.qui_entity.type === "uri" && iri.startsWith("http://")) iri = "<" + iri + ">";
                 else if (suggestion.qui_entity.type === "literal") iri = '"' + iri + '"';
-                queryInput.setRangeText(iri, queryInput.selectionStart - lastChars.length,
-                    queryInput.selectionEnd, "end");
-                document.querySelector("#query-input").focus();
+                queryInputElement.setRangeText(iri, queryInputElement.selectionStart - lastChars.length,
+                    queryInputElement.selectionEnd, "end");
+                queryInputElement.focus();
                 suggestionDiv.innerHTML = "";
                 await autoSuggestion();
             });
