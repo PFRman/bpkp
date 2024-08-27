@@ -9,6 +9,7 @@ const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 // todo: how to deal with whitespaces in strings (ac, syntax highlighting)?
 
+const QLEVER_TIMEOUT = 5000;
 
 let definedPrefixes = [];
 
@@ -569,8 +570,8 @@ async function requestQleverSuggestions (lastChars) {
             let requestQuery = requestPrefixes + value;
             console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
             response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
-                + encodeURIComponent(requestQuery))
-               .then(r => r.json());
+                + encodeURIComponent(requestQuery), { signal: AbortSignal.timeout(QLEVER_TIMEOUT) })
+                .then(r => r.json());
             // console.debug("currentCounter", currentCounter, "lastQleverRequest", currentCounter);
             // console.debug(response);
             if (currentCounter > lastQleverRequest) {
@@ -580,6 +581,7 @@ async function requestQleverSuggestions (lastChars) {
             }
         } catch (e) {
             printContextSensitiveSuggestions([], "", {});
+            console.log("Qlever request error:");
             console.log(e);
         }
     }, 150);
