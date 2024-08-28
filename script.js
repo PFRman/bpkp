@@ -46,11 +46,12 @@ let tSParser = {
         this.sparql = await Parser.Language.load('src/tree-sitter-sparql.wasm');
         this.parser.setLanguage(this.sparql);
     },
-    parse (input) {
+    parseSaveResults (input) {
         this.tree = this.parser.parse(input);
         return this.tree;
     }
 }
+let suggestionInput;
 
 export default function documentReady() {
     // hard wrap for the textarea, so that line counting works
@@ -141,8 +142,8 @@ async function processQuery() {
 
     // using tree-sitter SPARQL-parser
     if (document.querySelector("#treeSitterToggle").checked) {
-        // await treeSitterParse(sparqlInput);
-        // treeSitterQuery(document.querySelector("#treeSitterQuery").value);
+        await treeSitterParse(sparqlInput);
+        await treeSitterQuery(document.querySelector("#treeSitterQuery").value);
     }
 
     // using Jison-generated SPARQL-parser
@@ -213,7 +214,7 @@ async function textUtilsParse (sparqlInput) {
 
 async function treeSitterParse (sparqlInput) {
     let startTime = performance.now();
-    tSParser.parse(sparqlInput);
+    tSParser.parseSaveResults(sparqlInput);
     let endTime = performance.now();
     let treeSitterTime = endTime - startTime;
     console.log("treeSitterTime: ", treeSitterTime);
@@ -229,6 +230,7 @@ async function treeSitterQuery (queryInput) {
         output += `<tr>
                     <td style="color: #6f8c4a">${escape(capture.name)}</td>
                     <td>${escape(capture.node.text)}</td>
+                    <td>${capture.node.startPosition.row},${capture.node.startPosition.column}</td>
                    </tr>`;
     })
     document.querySelector("#treeSitterQueryResults").innerHTML = output;
@@ -239,15 +241,13 @@ function escape (str) {
 }
 
 async function treeSitterContext () {
-    const triplesQuery = tSParser.sparql.query(
-        `(ERROR (triples_same_subject) @triples)`
-    )
     const subjectQuery = tSParser.sparql.query(
         `(ERROR [(var) (rdf_literal) (boolean_literal) (nil) (iri_reference) (prefixed_name) (integer) (decimal) (double) (blank_node_label) (anon)] @subject)`);
     const predicateQuery = tSParser.sparql.query(
         `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
     )
-    const triplesCaptures = triplesQuery.captures(tSParser.tree.rootNode);
+    const triplesCaptures = getContextTriples();
+    console.debug(`captured Triples`, triplesCaptures);
     const subjectCaptures = subjectQuery.captures(tSParser.tree.rootNode);
     const predicateCaptures = predicateQuery.captures(tSParser.tree.rootNode);
     let subject, predicate;
@@ -268,7 +268,48 @@ async function treeSitterContext () {
     }
 }
 
-export function filterContext (triples, subject, predicate) {
+/** Get a more informative parse tree through adding missing right braces
+ *
+ * @returns {*} tree-sitter parse tree with all braces closed
+ */
+function closeBraces () {
+    const leftBraceQuery = tSParser.sparql.query(`"{" @lbrace`);
+    const rightBraceQuery = tSParser.sparql.query(`"}" @rbrace`);
+    const notClosedBraces = leftBraceQuery.captures(tSParser.tree.rootNode).length
+        - rightBraceQuery.captures(tSParser.tree.rootNode).length;
+    const enhancedInput = suggestionInput + "§ " + "}".repeat(notClosedBraces);
+    return tSParser.parser.parse(enhancedInput);
+}
+
+function getContextTriples () {
+    const closedBraces = closeBraces();
+    console.log("closedBraces Tree", closedBraces.rootNode.toString());
+
+    // find potential MISSING-nodes
+    let missingNodes = []
+    function traverseTree(node) {
+        for (let n of node.children) {
+            if (n.isMissing) {
+                missingNodes.push(n);
+            }
+            traverseTree(n);
+        }
+    }
+    traverseTree(closedBraces.rootNode);
+    console.debug("missing Nodes:", missingNodes);
+    const triplesQuery = tSParser.sparql.query(
+        `(ERROR (triples_same_subject) @triples)
+         (
+            "UNION" . (_
+                (triples_block (triples_same_subject) @triples ) 
+                (ERROR)
+            )
+         )`
+    )
+    return triplesQuery.captures(closedBraces.rootNode);
+}
+
+function filterContext (triples, subject, predicate) {
     if (subject?.node.type !== "var" && predicate?.node.type !== "var") {
         return [];
     }
@@ -332,6 +373,7 @@ async function autoSuggestion () {
         col = getPreviousLineEndColumnNumber(sparqlInputElement);
         line = line - 1;
     }
+    suggestionInput = slicedInput;
     sJSparser.update(slicedInput);
     await treeSitterParse(slicedInput);
     console.debug("updated parser:", Object.assign({}, sJSparser));
