@@ -246,10 +246,12 @@ async function treeSitterContext () {
     const predicateQuery = tSParser.sparql.query(
         `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
     )
+    const subqueryQuery = tSParser.sparql.query(`(ERROR (_ (group_graph_pattern (sub_select)) @sub ))`);
     const triplesCaptures = getContextTriples();
     console.debug(`captured Triples`, triplesCaptures);
     const subjectCaptures = subjectQuery.captures(tSParser.tree.rootNode);
     const predicateCaptures = predicateQuery.captures(tSParser.tree.rootNode);
+    const subqueryCaptures = subqueryQuery.captures(tSParser.tree.rootNode);
     let subject, predicate;
     if (subjectCaptures.length > 0) {
         subject = subjectCaptures[0];
@@ -260,9 +262,9 @@ async function treeSitterContext () {
     console.debug(`tree-sitter previous captures`, triplesCaptures.map(t => t.node.text));
     // triplesCaptures.forEach(triple => console.debug(triple.node.text));
     console.debug(`subject`, subject?.node.type, `predicate`, predicate?.node.type);
-    const filteredTriples = filterContext(triplesCaptures, subject, predicate);
+    const filteredTriples = filterContext(triplesCaptures, subject, predicate, subqueryCaptures);
     return {
-        triples: filteredTriples,
+        context: filteredTriples,
         subject: subject,
         predicate: predicate,
     }
@@ -277,6 +279,7 @@ function closeBraces () {
     const rightBraceQuery = tSParser.sparql.query(`"}" @rbrace`);
     const notClosedBraces = leftBraceQuery.captures(tSParser.tree.rootNode).length
         - rightBraceQuery.captures(tSParser.tree.rootNode).length;
+    // insert unknown char (§) to produce an ERROR node (instead of a MISSING-node)
     const enhancedInput = suggestionInput + "§ " + "}".repeat(notClosedBraces);
     return tSParser.parser.parse(enhancedInput);
 }
@@ -285,18 +288,6 @@ function getContextTriples () {
     const closedBraces = closeBraces();
     console.log("closedBraces Tree", closedBraces.rootNode.toString());
 
-    // find potential MISSING-nodes
-    let missingNodes = []
-    function traverseTree(node) {
-        for (let n of node.children) {
-            if (n.isMissing) {
-                missingNodes.push(n);
-            }
-            traverseTree(n);
-        }
-    }
-    traverseTree(closedBraces.rootNode);
-    console.debug("missing Nodes:", missingNodes);
     const triplesQuery = tSParser.sparql.query(
         `(ERROR (triples_same_subject) @triples)
          (
@@ -309,13 +300,13 @@ function getContextTriples () {
     return triplesQuery.captures(closedBraces.rootNode);
 }
 
-function filterContext (triples, subject, predicate) {
+function filterContext (triples, subject, predicate, subqueries) {
     if (subject?.node.type !== "var" && predicate?.node.type !== "var") {
         return [];
     }
     let vars = new Set();
     let triplesToCheck = triples.slice();
-    let contextTriples = []
+    let contextNodes = []
     if (subject?.node.type === "var") vars.add(subject.node.text);
     if (predicate?.node.type === "var") vars.add(predicate.node.text);
 
@@ -330,7 +321,7 @@ function filterContext (triples, subject, predicate) {
             let tripleVars = query.captures(triple.node).map(v => v.node.text);
             if (tripleVars.some(v => vars.has(v))) {
                 tripleVars.forEach(v => vars.add(v));
-                contextTriples.push(triple);
+                contextNodes.push(triple);
             } else {
                 freeTriples.push(triple);
             }
@@ -338,7 +329,16 @@ function filterContext (triples, subject, predicate) {
         triplesToCheck = freeTriples.slice();
         c++;
     }
-    return contextTriples;
+
+    subqueries.forEach(s => {
+        const subqueryVars = s.node.firstNamedChild.firstNamedChild.childrenForFieldName("bound_variable");
+        if (subqueryVars.some(v => vars.has(v.text))) {
+            contextNodes.push(s);
+            console.debug(s.text);
+        }
+    });
+
+    return contextNodes;
 }
 
 /** Find fitting suggestions for the cursor position and print them */
@@ -542,14 +542,14 @@ async function requestQleverSuggestions (lastChars) {
             const previousTriples = sJSparser.contextTriples;
             console.log("previousTriples (rule application):", previousTriples);
             console.log("previousTriples (vstack):", vstack[6]);
-            console.log("previousTriples (tree sitter query):", tSContext.triples);
+            console.log("Context (tree sitter query):", tSContext.context);
             let previousTriplesString = "";
             for (let triple of previousTriples) {
                 // console.log(triple);
                 previousTriplesString +=
                     `${termToString(triple.subject)} ${termToString(triple.predicate)} ${termToString(triple.object)} .\n`;
             }
-            previousTriplesString = tSContext.triples.map(t => t.node.text + " .\n").join("");
+            previousTriplesString = tSContext.context.map(t => t.node.text + " .\n").join("");
             console.debug("previousTriplesString: ", previousTriplesString);
             // const subject = vstack[7];
             const subject = tSContext.subject?.node;
