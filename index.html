@@ -54,29 +54,6 @@
         </details>
         <div>
             <details>
-                <summary>Output of tree-sitter parser:</summary>
-                <br>
-                <div id="treeSitterOutput" class="output"></div>
-                <br>
-                <label for="treeSitterQuery">Query these results:</label><br>
-                <textarea id="treeSitterQuery"></textarea>
-                <table id="treeSitterQueryResults" class="output"></table>
-            </details>
-        </div>
-        <div>
-            <details>
-                <summary>Output of SPARQL.js parser:</summary>
-                <div id="sparqlJsOutput" class="output"></div>
-            </details>
-        </div>
-        <div>
-            <details>
-                <summary>Output of text-utils parser:</summary>
-                <div id="text-utilsOutput"></div>
-            </details>
-        </div>
-        <div>
-            <details>
                 <summary>Qlever-request</summary>
                 <div>
                     <p>
@@ -87,6 +64,29 @@
                     <div>%context%: <div id="context" class="output"></div></div><br/>
                     <div>Request: <div id="qlever-request" class="output"></div></div>
                 </div>
+            </details>
+        </div>
+        <div id="tree-sitter">
+            <details>
+                <summary>Output of tree-sitter parser:</summary>
+                <br>
+                <div id="treeSitterOutput" class="output"></div>
+                <br>
+                <label for="treeSitterQuery">Query these results:</label><br>
+                <textarea id="treeSitterQuery"></textarea>
+                <table id="treeSitterQueryResults" class="output"></table>
+            </details>
+        </div>
+        <div id="sparqlJs">
+            <details>
+                <summary>Output of SPARQL.js parser:</summary>
+                <div id="sparqlJsOutput" class="output"></div>
+            </details>
+        </div>
+        <div id="text-utils">
+            <details>
+                <summary>Output of text-utils parser:</summary>
+                <div id="text-utilsOutput"></div>
             </details>
         </div>
     </div>

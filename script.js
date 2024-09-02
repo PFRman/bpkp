@@ -136,16 +136,25 @@ async function processQuery() {
 
     // using tree-sitter SPARQL-parser
     if (document.querySelector("#treeSitterToggle").checked) {
+        document.querySelector("#tree-sitter").style.display = "block";
         await treeSitterParse(sparqlInput);
         await treeSitterQuery(document.querySelector("#treeSitterQuery").value);
+    } else {
+        document.querySelector("#tree-sitter").style.display = "none";
     }
 
     // using Jison-generated SPARQL-parser
-    if (document.querySelector("#sparqlJsToggle").checked) /*console.log(
-        "sparqlJsParse result:", */sparqlJsParse(sparqlInput);
+    if (document.querySelector("#sparqlJsToggle").checked) {
+        document.querySelector("#sparqlJs").style.display = "block";
+        /*console.log("sparqlJsParse result:", */sparqlJsParse(sparqlInput);
+    } else document.querySelector("#sparqlJs").style.display = "none";
 
     // using ad-freiburg/text-utils
-    if (document.querySelector("#text-utilsToggle").checked) await textUtilsParse(sparqlInput);
+    if (document.querySelector("#text-utilsToggle").checked) {
+        document.querySelector("#text-utils").style.display = "block";
+        await textUtilsParse(sparqlInput);
+    }
+    else document.querySelector("#text-utils").style.display = "none";
 }
 
 function syntaxHighlight (input) {
