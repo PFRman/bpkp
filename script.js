@@ -38,22 +38,28 @@ let sJSparser = { // does it have to be global?
     }
 }
 
-let tSParser = {
-    async init () {
-        const Parser = window.TreeSitter;
-        await Parser.init().then(() => { /* ready */ });
-        this.parser = new Parser;
-        this.sparql = await Parser.Language.load('src/tree-sitter-sparql.wasm');
-        this.parser.setLanguage(this.sparql);
-    },
-    parseSaveResults (input) {
-        this.tree = this.parser.parse(input);
-        return this.tree;
-    }
+function TSParser () {}
+
+TSParser.prototype.init = async function() {
+    const Parser = window.TreeSitter;
+    await Parser.init().then(() => { /* ready */ });
+    this.parser = new Parser;
+    this.sparql = await Parser.Language.load('src/tree-sitter-sparql.wasm');
+    this.parser.setLanguage(this.sparql);
 }
+
+TSParser.prototype.parse = function(input) {
+    this.tree = this.parser.parse(input);
+    return this.tree;
+}
+
+let tSParser = new TSParser();
+let autoSuggestTSParser = new TSParser();
 let suggestionInput;
 
-export default function documentReady() {
+export default async function documentReady() {
+    await tSParser.init();
+    await autoSuggestTSParser.init();
     // hard wrap for the textarea, so that line counting works
     document.querySelector("#query-input").wrap = "hard";
     document.querySelector("#query-input").addEventListener("input", processQuery);
@@ -63,7 +69,6 @@ export default function documentReady() {
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
     document.querySelector("#treeSitterToggle").addEventListener("change", processQuery);
     document.querySelector("#treeSitterQuery").addEventListener("input", processQuery);
-    tSParser.init();
     processQuery();
     // autoSuggestion();
 }
@@ -219,7 +224,7 @@ async function textUtilsParse (sparqlInput) {
 
 async function treeSitterParse (sparqlInput) {
     let startTime = performance.now();
-    tSParser.parseSaveResults(sparqlInput);
+    tSParser.parse(sparqlInput);
     let endTime = performance.now();
     let treeSitterTime = endTime - startTime;
     console.log("treeSitterTime: ", treeSitterTime);
@@ -246,17 +251,15 @@ function escape (str) {
 }
 
 async function treeSitterContext () {
-    const subjectQuery = tSParser.sparql.query(
+    const subjectQuery = autoSuggestTSParser.sparql.query(
         `(ERROR [(var) (rdf_literal) (boolean_literal) (nil) (iri_reference) (prefixed_name) (integer) (decimal) (double) (blank_node_label) (anon)] @subject)`);
-    const predicateQuery = tSParser.sparql.query(
+    const predicateQuery = autoSuggestTSParser.sparql.query(
         `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
     )
-    const subqueryQuery = tSParser.sparql.query(`(ERROR (_ (group_graph_pattern (sub_select)) @sub ))`);
     const context = getContextTriples();
     console.debug(`captured Triples`, context.map(t => t.node.text));
-    const subjectCaptures = subjectQuery.captures(tSParser.tree.rootNode);
-    const predicateCaptures = predicateQuery.captures(tSParser.tree.rootNode);
-    const subqueryCaptures = subqueryQuery.captures(tSParser.tree.rootNode);
+    const subjectCaptures = subjectQuery.captures(autoSuggestTSParser.tree.rootNode);
+    const predicateCaptures = predicateQuery.captures(autoSuggestTSParser.tree.rootNode);
     let subject, predicate;
     if (subjectCaptures.length > 0) {
         subject = subjectCaptures[0];
@@ -278,26 +281,26 @@ async function treeSitterContext () {
  * @returns {*} tree-sitter parse tree with all braces closed
  */
 function closeBraces () {
-    const leftBraceQuery = tSParser.sparql.query(`"{" @lbrace`);
-    const rightBraceQuery = tSParser.sparql.query(`"}" @rbrace`);
-    const notClosedBraces = leftBraceQuery.captures(tSParser.tree.rootNode).length
-        - rightBraceQuery.captures(tSParser.tree.rootNode).length;
+    const leftBraceQuery = autoSuggestTSParser.sparql.query(`"{" @lbrace`);
+    const rightBraceQuery = autoSuggestTSParser.sparql.query(`"}" @rbrace`);
+    const notClosedBraces = leftBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length
+        - rightBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length;
     // insert unknown char (§) to produce an ERROR node (instead of a MISSING-node)
     const enhancedInput = suggestionInput + "§ " + "}".repeat(notClosedBraces);
-    return tSParser.parser.parse(enhancedInput);
+    return autoSuggestTSParser.parser.parse(enhancedInput);
 }
 
 function getContextTriples () {
     const closedBraces = closeBraces();
 
     // find ancestor SELECT (SelectQuery or SubSelect)
-    const errorQuery = tSParser.sparql.query(`(ERROR) @err`);
+    const errorQuery = autoSuggestTSParser.sparql.query(`(ERROR) @err`);
     const errorNode = errorQuery.captures(closedBraces.rootNode)[0].node;
 
     const SELECTAncestor = getAncestorOfType(errorNode, "where_clause").parent;
 
     // query all triples and SubSelects inside that, that aren't part of a SubSelect
-    const triplesQuery = tSParser.sparql.query(
+    const triplesQuery = autoSuggestTSParser.sparql.query(
         `(triples_same_subject) @triples (group_graph_pattern (sub_select)) @subs`
     )
     let triples = triplesQuery.captures(SELECTAncestor)
@@ -339,7 +342,7 @@ function filterContext (context, subject, predicate) {
         let freeContext = [];
         for (const contextNode of contextToCheck) {
             if (contextNode.node.type === "triples_same_subject") {
-                let query = tSParser.sparql.query(`(triples_same_subject
+                let query = autoSuggestTSParser.sparql.query(`(triples_same_subject
                     (var)? @svar  
                     (_(_(var)? @pvar 
                     (_ (var)? @ovar))) )`);
@@ -402,7 +405,7 @@ async function autoSuggestion () {
     }
     suggestionInput = slicedInput;
     sJSparser.update(slicedInput);
-    await treeSitterParse(slicedInput);
+    autoSuggestTSParser.parse(slicedInput);
     console.debug("updated parser:", Object.assign({}, sJSparser));
     let suggestions = getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
     printSuggestions(suggestions, lastCharsBeforeCursor);
@@ -426,7 +429,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     // let completionSuggestions = [];
     let otherSuggestions = [];
     const prefixes = Object.keys(sJSparser.prefixes);
-    const vars = tSParser.sparql.query(`(var) @var`).captures(tSParser.tree.rootNode);
+    const vars = autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode);
     // let generatedInput;
     // const RandExp = require("randexp");
     if (expectedAtCursor === undefined) return [];
