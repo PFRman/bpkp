@@ -247,8 +247,8 @@ async function treeSitterContext () {
         `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
     )
     const subqueryQuery = tSParser.sparql.query(`(ERROR (_ (group_graph_pattern (sub_select)) @sub ))`);
-    const triplesCaptures = getContextTriples();
-    console.debug(`captured Triples`, triplesCaptures);
+    const context = getContextTriples();
+    console.debug(`captured Triples`, context.map(t => t.node.text));
     const subjectCaptures = subjectQuery.captures(tSParser.tree.rootNode);
     const predicateCaptures = predicateQuery.captures(tSParser.tree.rootNode);
     const subqueryCaptures = subqueryQuery.captures(tSParser.tree.rootNode);
@@ -259,10 +259,8 @@ async function treeSitterContext () {
             predicate = predicateCaptures.slice(-1)[0];
         }
     }
-    console.debug(`tree-sitter previous captures`, triplesCaptures.map(t => t.node.text));
-    // triplesCaptures.forEach(triple => console.debug(triple.node.text));
     console.debug(`subject`, subject?.node.type, `predicate`, predicate?.node.type);
-    const filteredTriples = filterContext(triplesCaptures, subject, predicate, subqueryCaptures);
+    const filteredTriples = filterContext(context, subject, predicate);
     return {
         context: filteredTriples,
         subject: subject,
@@ -286,57 +284,81 @@ function closeBraces () {
 
 function getContextTriples () {
     const closedBraces = closeBraces();
-    console.log("closedBraces Tree", closedBraces.rootNode.toString());
 
+    // find ancestor SELECT (SelectQuery or SubSelect)
+    const errorQuery = tSParser.sparql.query(`(ERROR) @err`);
+    const errorNode = errorQuery.captures(closedBraces.rootNode)[0].node;
+
+    const SELECTAncestor = getAncestorOfType(errorNode, "where_clause").parent;
+
+    // query all triples and SubSelects inside that, that aren't part of a SubSelect
     const triplesQuery = tSParser.sparql.query(
-        `(ERROR (triples_same_subject) @triples)
-         (
-            "UNION" . (_
-                (triples_block (triples_same_subject) @triples ) 
-                (ERROR)
-            )
-         )`
+        `(triples_same_subject) @triples (group_graph_pattern (sub_select)) @subs`
     )
-    return triplesQuery.captures(closedBraces.rootNode);
+    let triples = triplesQuery.captures(SELECTAncestor)
+        .filter(t => {
+            const a = getAncestorOfType(t.node, "sub_select");
+            return !(a && a.id !== SELECTAncestor.id);
+        });
+
+    // filter UNION 1st block
+    // todo also for arbitrary sub-GGPs
+    if (errorNode.parent.parent.type === "group_or_union_graph_pattern") {
+        const unionTriples = triplesQuery.captures(errorNode.parent.previousNamedSibling);
+        triples = triples.filter(t => !unionTriples.some(u => u.node.id === t.node.id))
+    }
+    return triples;
 }
 
-function filterContext (triples, subject, predicate, subqueries) {
+function getAncestorOfType (node, type) {
+    let parent = node.parent;
+    while (parent.type !== type) {
+        parent = parent.parent;
+        if (parent.type === "unit") return null;
+    }
+    return parent;
+}
+
+function filterContext (context, subject, predicate) {
     if (subject?.node.type !== "var" && predicate?.node.type !== "var") {
         return [];
     }
     let vars = new Set();
-    let triplesToCheck = triples.slice();
+    let contextToCheck = context.slice();
     let contextNodes = []
     if (subject?.node.type === "var") vars.add(subject.node.text);
     if (predicate?.node.type === "var") vars.add(predicate.node.text);
 
     let c = 0;
-    while (triplesToCheck.length > 0 && c < triples.length) {
-        let freeTriples = [];
-        for (const triple of triplesToCheck) {
-            let query = tSParser.sparql.query(`(triples_same_subject
-                (var)? @svar  
-                (_(_(var)? @pvar 
-                (_ (var)? @ovar))) )`);
-            let tripleVars = query.captures(triple.node).map(v => v.node.text);
-            if (tripleVars.some(v => vars.has(v))) {
-                tripleVars.forEach(v => vars.add(v));
-                contextNodes.push(triple);
-            } else {
-                freeTriples.push(triple);
+    while (contextToCheck.length > 0 && c < context.length) {
+        let freeContext = [];
+        for (const contextNode of contextToCheck) {
+            if (contextNode.node.type === "triples_same_subject") {
+                let query = tSParser.sparql.query(`(triples_same_subject
+                    (var)? @svar  
+                    (_(_(var)? @pvar 
+                    (_ (var)? @ovar))) )`);
+                let tripleVars = query.captures(contextNode.node).map(v => v.node.text);
+                if (tripleVars.some(v => vars.has(v))) {
+                    tripleVars.forEach(v => vars.add(v));
+                    contextNodes.push(contextNode);
+                } else {
+                    freeContext.push(contextNode);
+                }
+            } else if (contextNode.node.firstNamedChild.type === "sub_select") {
+                const subqueryVars = contextNode.node.firstNamedChild.firstNamedChild
+                    .childrenForFieldName("bound_variable");
+                if (subqueryVars.some(v => vars.has(v.text))) {
+                    subqueryVars.forEach(v => vars.add(v));
+                    contextNodes.push(contextNode);
+                } else {
+                    freeContext.push(contextNode);
+                }
             }
         }
-        triplesToCheck = freeTriples.slice();
+        contextToCheck = freeContext.slice();
         c++;
     }
-
-    subqueries.forEach(s => {
-        const subqueryVars = s.node.firstNamedChild.firstNamedChild.childrenForFieldName("bound_variable");
-        if (subqueryVars.some(v => vars.has(v.text))) {
-            contextNodes.push(s);
-            console.debug(s.text);
-        }
-    });
 
     return contextNodes;
 }
@@ -559,6 +581,11 @@ async function requestQleverSuggestions (lastChars) {
             // console.log("subject: ", subject, "\nverb: ", verb);
             // "?query=PREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology-beta%23%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+wds%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0A%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0APREFIX+ontolex%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Flemon%2Fontolex%23%3E%0APREFIX+dct%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0APREFIX+wikibase%3A+%3Chttp%3A%2F%2Fwikiba.se%2Fontology%23%3E%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0APREFIX+schema%3A+%3Chttp%3A%2F%2Fschema.org%2F%3E%0APREFIX+cc%3A+%3Chttp%3A%2F%2Fcreativecommons.org%2Fns%23%3E%0APREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Font%2Fgeosparql%23%3E%0APREFIX+geof%3A+%3Chttp%3A%2F%2Fwww.opengis.net%2Fdef%2Ffunction%2Fgeosparql%2F%3E%0APREFIX+prov%3A+%3Chttp%3A%2F%2Fwww.w3.org%2Fns%2Fprov%23%3E%0APREFIX+wd%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2F%3E%0APREFIX+data%3A+%3Chttps%3A%2F%2Fwww.wikidata.org%2Fwiki%2FSpecial%3AEntityData%2F%3E%0APREFIX+s%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fentity%2Fstatement%2F%3E%0APREFIX+ref%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Freference%2F%3E%0APREFIX+v%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fvalue%2F%3E%0APREFIX+wdt%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect%2F%3E%0APREFIX+wdtn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fdirect-normalized%2F%3E%0APREFIX+p%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2F%3E%0APREFIX+ps%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2F%3E%0APREFIX+psv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue%2F%3E%0APREFIX+psn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fstatement%2Fvalue-normalized%2F%3E%0APREFIX+pq%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2F%3E%0APREFIX+pqv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue%2F%3E%0APREFIX+pqn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fqualifier%2Fvalue-normalized%2F%3E%0APREFIX+pr%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2F%3E%0APREFIX+prv%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue%2F%3E%0APREFIX+prn%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2Fvalue-normalized%2F%3E%0APREFIX+wdno%3A+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Fnovalue%2F%3E%0APREFIX+imdb%3A+%3Chttps%3A%2F%2Fwww.imdb.com%2F%3E%0APREFIX+qfn%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Ffunction%23%3E%0APREFIX+ql%3A+%3Chttp%3A%2F%2Fqlever.cs.uni-freiburg.de%2Fbuiltin-functions%2F%3E%0ASELECT+%3Fqui_entity+%28SAMPLE%28%3Fname%29+as+%3Fqui_name%29+%28SAMPLE%28%3Falias%29+as+%3Fqui_alias%29+%28SAMPLE%28%3Fcount%29+as+%3Fqui_count%29+WHERE+%7B%0A++%7B+SELECT+%3Fqui_entity+%28COUNT%28%3Fqui_entity%29+AS+%3Fcount%29+WHERE+%7B%0A++++wd%3AQ90+%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2FP47%3E+%3Fo+.+%3Fo+%3Fp+%3Fqui_entity+.%0A++%7D+GROUP+BY+%3Fqui_entity+%7D%0A++%0A++OPTIONAL+%7B+%3Fqui_entity+%40en%40rdfs%3Alabel+%3Fname+%7D%0A++BIND+%28%3Fqui_entity+AS+%3Falias%29%0A++%0A%7D+GROUP+BY+%3Fqui_entity+ORDER+BY+DESC%28%3Fqui_count%29%0ALIMIT+40%0AOFFSET+0&timeout=5000ms"
 
+            document.querySelector("#subject").innerHTML = (subject ? subject.text : "<i>undefined</i>");
+            document.querySelector("#predicate").innerHTML = (verb ? verb.text : "<i>undefined</i>");
+            document.querySelector("#prefix").innerHTML = lastChars;
+            document.querySelector("#context").innerText = previousTriplesString;
+
             // console.log("typeof", subject);
             if (subject === undefined || Array.isArray(subject) ) {
                 // subject suggestion
@@ -609,6 +636,7 @@ async function requestQleverSuggestions (lastChars) {
             value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
                 "LIMIT 40\n"
                 // + "OFFSET 0"
+            document.querySelector("#qlever-request").innerText = value;
             let requestQuery = requestPrefixes + value;
             console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
             response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="
