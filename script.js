@@ -7,7 +7,6 @@ const keywords = await fetch("src/keywords.txt")
 
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
-// todo: how to deal with whitespaces in strings (syntax highlighting)?
 
 const QLEVER_TIMEOUT = 5000;
 
@@ -159,7 +158,7 @@ async function processQuery() {
 
 function syntaxHighlight (input) {
     // string Syntax highlighting
-    let sparqlOutput = input.replaceAll(/"\w*"/g, `<span class="string">$&</span>`);
+    let sparqlOutput = input.replaceAll(/"([^\x22\x5C\cA\cD])*"/g, `<span class="string">$&</span>`);
 
     // keyword syntax highlighting
     for (let keyword of keywords) {
