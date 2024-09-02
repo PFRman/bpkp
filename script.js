@@ -519,7 +519,7 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
         suggestionElement.classList.add("suggestion");
         let iri = suggestion.qui_entity.value;
         for (const prefix in prefixes) {
-            if (iri.startsWith(prefixes[prefix])) {
+            if (iri.startsWith(prefixes[prefix]) && !iri.slice(prefixes[prefix].length).includes("/")) {
                 iri = prefix + ":" + iri.slice(prefixes[prefix].length);
                 break;
             }
@@ -670,7 +670,7 @@ async function requestQleverSuggestions (lastChars) {
             if (currentCounter > lastQleverRequest) {
                 lastQleverRequest = currentCounter;
                 printContextSensitiveSuggestions([], "", {});
-                }
+            }
             console.log(`Qlever request #${currentCounter} error:`);
             console.log(e);
         }
