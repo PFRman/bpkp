@@ -8,7 +8,7 @@ const keywords = await fetch("src/keywords.txt")
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 
-const QLEVER_TIMEOUT = 5000;
+const QLEVER_TIMEOUT = 10000;
 
 let definedPrefixes = [];
 
@@ -290,7 +290,7 @@ async function treeSitterContext () {
  */
 function closeBraces () {
     const leftBraceQuery = autoSuggestTSParser.sparql.query(`"{" @lbrace`);
-    const rightBraceQuery = autoSuggestTSParser.sparql.query(`"}" @rbrace`);
+    const rightBraceQuery = autoSuggestTSParser.sparql.query(`("}" @rbrace (#eq? @rbrace "}"))`);
     const notClosedBraces = leftBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length
         - rightBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length;
     // insert unknown char (§) to produce an ERROR node (instead of a MISSING-node)
@@ -329,8 +329,8 @@ function getContextTriples () {
 function getAncestorOfType (node, type) {
     let parent = node.parent;
     while (parent.type !== type) {
-        parent = parent.parent;
         if (parent.type === "unit") return null;
+        parent = parent.parent;
     }
     return parent;
 }
@@ -414,6 +414,7 @@ async function autoSuggestion () {
     suggestionInput = slicedInput;
     sJSparser.update(slicedInput);
     autoSuggestTSParser.parse(slicedInput);
+
     console.debug("updated parser:", Object.assign({}, sJSparser));
     let suggestions = getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
     printSuggestions(suggestions, lastCharsBeforeCursor);
