@@ -667,8 +667,11 @@ async function requestQleverSuggestions (lastChars) {
                 printContextSensitiveSuggestions(response.results.bindings, lastChars, sJSparser.prefixes);
             }
         } catch (e) {
-            printContextSensitiveSuggestions([], "", {});
-            console.log("Qlever request error:");
+            if (currentCounter > lastQleverRequest) {
+                lastQleverRequest = currentCounter;
+                printContextSensitiveSuggestions([], "", {});
+                }
+            console.log(`Qlever request #${currentCounter} error:`);
             console.log(e);
         }
     }, 150);
