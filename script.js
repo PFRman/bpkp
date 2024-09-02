@@ -71,20 +71,9 @@ export default function documentReady() {
 async function processQuery() {
     const sparqlInput = document.querySelector("#query-input").value;
     const sparqlLower = sparqlInput.toLowerCase();
-    let sparqlOutput = sparqlLower
-        .replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
+    let sparqlOutput = escape(sparqlLower);
 
-    // string Syntax highlighting
-    sparqlOutput = sparqlOutput.replaceAll(/"\w*"/g, `<span class="string">$&</span>`)
-
-    // keyword syntax highlighting
-    for (let keyword of keywords) {
-        sparqlOutput = sparqlOutput.replaceAll(new RegExp(`\\b${keyword.toLowerCase()}\\b`, "g"),
-            `<span class="keyword">${keyword}</span>`);
-    }
-
-    // variable syntax highlighting
-    sparqlOutput = sparqlOutput.replaceAll(/\?\w*/g, `<span class="variable">$&</span>`);
+    sparqlOutput = syntaxHighlight(sparqlOutput);
 
     document.querySelector("#text").innerHTML = sparqlOutput;
 
@@ -152,6 +141,22 @@ async function processQuery() {
 
     // using ad-freiburg/text-utils
     if (document.querySelector("#text-utilsToggle").checked) await textUtilsParse(sparqlInput);
+}
+
+function syntaxHighlight (input) {
+    // string Syntax highlighting
+    let sparqlOutput = input.replaceAll(/"\w*"/g, `<span class="string">$&</span>`);
+
+    // keyword syntax highlighting
+    for (let keyword of keywords) {
+        sparqlOutput = sparqlOutput.replaceAll(new RegExp(
+            `((?<![\\w!@#$^%+?])(?=[\\w!@#$^%+?])|(?<=[\\w!@#$^%+?])(?![\\w!@#$^%+?]))${keyword}\\b`, "gi"),
+            `<span class="keyword">${keyword}</span>`);
+    }
+
+    // variable syntax highlighting
+    sparqlOutput = sparqlOutput.replaceAll(/\?\w*/gi, `<span class="variable">$&</span>`);
+    return sparqlOutput;
 }
 
 /** Parse a SPARQL-query using the SPARQL.js module
@@ -584,7 +589,7 @@ async function requestQleverSuggestions (lastChars) {
             document.querySelector("#subject").innerHTML = (subject ? subject.text : "<i>undefined</i>");
             document.querySelector("#predicate").innerHTML = (verb ? verb.text : "<i>undefined</i>");
             document.querySelector("#prefix").innerHTML = lastChars;
-            document.querySelector("#context").innerText = previousTriplesString;
+            document.querySelector("#context").innerHTML = syntaxHighlight(escape(previousTriplesString));
 
             // console.log("typeof", subject);
             if (subject === undefined || Array.isArray(subject) ) {
@@ -636,7 +641,7 @@ async function requestQleverSuggestions (lastChars) {
             value += "} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)\n" +
                 "LIMIT 40\n"
                 // + "OFFSET 0"
-            document.querySelector("#qlever-request").innerText = value;
+            document.querySelector("#qlever-request").innerHTML = syntaxHighlight(escape(value));
             let requestQuery = requestPrefixes + value;
             console.debug("request #" + currentCounter,  "to qlever backend:\n" + requestQuery);
             response = await fetch("https://qlever.cs.uni-freiburg.de/api/wikidata?query="

@@ -71,7 +71,7 @@ a {
     color: lightblue;
 }
 
-#text, #sparqlJsOutput, #text-utilsOutput, #vocc, #nvocc {
+#text, #sparqlJsOutput, #text-utilsOutput, #vocc, #nvocc, #context, #qlever-request {
     white-space: pre;
 }
 
