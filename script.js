@@ -52,6 +52,11 @@ TSParser.prototype.parse = function(input) {
     return this.tree;
 }
 
+TSParser.prototype.errorNode = function (tree) {
+    const errorQuery = this.sparql.query(`(ERROR) @err`);
+    return errorQuery.captures(tree.rootNode)[0].node;
+}
+
 let tSParser = new TSParser();
 let autoSuggestTSParser = new TSParser();
 let suggestionInput;
@@ -293,8 +298,14 @@ function closeBraces () {
     const rightBraceQuery = autoSuggestTSParser.sparql.query(`("}" @rbrace (#eq? @rbrace "}"))`);
     const notClosedBraces = leftBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length
         - rightBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length;
+    const leftParenthesesQuery = autoSuggestTSParser.sparql.query(`"{" @lbrace`);
+    const rightParenthesesQuery = autoSuggestTSParser.sparql.query(`("}" @rbrace (#eq? @rbrace "}"))`);
+    const notClosedParentheses = leftParenthesesQuery.captures(autoSuggestTSParser.tree.rootNode).length
+        - rightParenthesesQuery.captures(autoSuggestTSParser.tree.rootNode).length;
     // insert unknown char (§) to produce an ERROR node (instead of a MISSING-node)
-    const enhancedInput = suggestionInput + "§ " + "}".repeat(notClosedBraces);
+    const enhancedInput = suggestionInput + "§ "
+        + ")".repeat(notClosedParentheses) + "}".repeat(notClosedBraces);
+    console.debug(enhancedInput)
     return autoSuggestTSParser.parser.parse(enhancedInput);
 }
 
@@ -302,8 +313,7 @@ function getContextTriples () {
     const closedBraces = closeBraces();
 
     // find ancestor SELECT (SelectQuery or SubSelect)
-    const errorQuery = autoSuggestTSParser.sparql.query(`(ERROR) @err`);
-    const errorNode = errorQuery.captures(closedBraces.rootNode)[0].node;
+    const errorNode = autoSuggestTSParser.errorNode(closedBraces);
 
     const SELECTAncestor = getAncestorOfType(errorNode, "where_clause").parent;
 
@@ -421,8 +431,20 @@ async function autoSuggestion () {
     document.querySelector("#suggestions").scrollTop = 0;
     document.querySelector("#context-sensitive-suggestions").innerHTML =
         '<img src="src/ajax-loader.gif" alt="loading...">';
-    await requestQleverSuggestions(lastCharsBeforeCursor);
+    if (isInTripleBlock()) {
+        await requestQleverSuggestions(lastCharsBeforeCursor);
+    } else {
+        console.log("no triple suggestion");
+        printContextSensitiveSuggestions([], "", {})
+    }
     sparqlInputElement.focus();
+}
+
+function isInTripleBlock () {
+    const tree = closeBraces();
+    console.log(tree.rootNode.toString());
+    const parentType = autoSuggestTSParser.errorNode(tree).parent.type;
+    return (parentType === "triples_block" || parentType === "group_graph_pattern");
 }
 
 
@@ -570,18 +592,18 @@ async function requestQleverSuggestions (lastChars) {
             }
             const vstack = sJSparser.vstack;
             console.log("vstack: ", vstack.slice());
-            if (vstack.length < 8) {
+            /* if (vstack.length < 8) {
                 printContextSensitiveSuggestions([], "", {})
                 return;
-            }
+            }*/
             document.querySelector("#context-sensitive-suggestions").innerHTML =
                 '<img src="src/ajax-loader.gif" alt="loading...">';
             const tSContext = await treeSitterContext();
             // const previousTriples = vstack[6];
             const previousTriples = sJSparser.contextTriples;
-            console.log("previousTriples (rule application):", previousTriples);
-            console.log("previousTriples (vstack):", vstack[6]);
-            console.log("Context (tree sitter query):", tSContext.context);
+            // console.log("previousTriples (rule application):", previousTriples);
+            // console.log("previousTriples (vstack):", vstack[6]);
+            // console.log("Context (tree sitter query):", tSContext.context);
             let previousTriplesString = "";
             for (let triple of previousTriples) {
                 // console.log(triple);
