@@ -8,7 +8,7 @@ const keywords = await fetch("src/keywords.txt")
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 
-const QLEVER_TIMEOUT = 10000;
+const QLEVER_TIMEOUT = 15000;
 
 let definedPrefixes = [];
 
@@ -399,7 +399,7 @@ async function autoSuggestion () {
     let lastCharsBeforeCursor;
     let pos = sparqlInputElement.selectionStart;
     let char = sparqlInput[pos];
-    while (/\S/.test(char) && pos >= 0) {
+    while (/[^\s(){}]/.test(char) && pos >= 0) {
         pos -= 1;
         char = sparqlInput[pos];
     }
@@ -443,7 +443,7 @@ async function autoSuggestion () {
 function isInTripleBlock () {
     const tree = closeBraces();
     console.log(tree.rootNode.toString());
-    const parentType = autoSuggestTSParser.errorNode(tree).parent.type;
+    const parentType = autoSuggestTSParser.errorNode(tree).parent?.type;
     return (parentType === "triples_block" || parentType === "group_graph_pattern");
 }
 
@@ -689,7 +689,7 @@ async function requestQleverSuggestions (lastChars) {
                 printContextSensitiveSuggestions(response.results.bindings, lastChars, sJSparser.prefixes);
             }
         } catch (e) {
-            if (currentCounter > lastQleverRequest) {
+            if (currentCounter > lastQleverRequest && currentCounter >= qleverRequestCounter-1) {
                 lastQleverRequest = currentCounter;
                 printContextSensitiveSuggestions([], "", {});
             }

@@ -1553,13 +1553,15 @@ case 7:
           for (const selectVar of $$[$0-3].variables) {
             if (selectVar.termType === "Variable") {
               if (!$$[$0].group || !$$[$0].group.map(groupVar => getExpressionId(groupVar)).includes(getExpressionId(selectVar))) {
-                throw Error("Projection of ungrouped variable (?" + getExpressionId(selectVar) + ")");
+                // throw Error("Projection of ungrouped variable (?" + getExpressionId(selectVar) + ")");
+                  console.warn("Projection of ungrouped variable (?" + getExpressionId(selectVar) + ")");
               }
             } else if (getAggregatesOfExpression(selectVar.expression).length === 0) {
               const usedVars = getVariablesFromExpression(selectVar.expression);
               for (const usedVar of usedVars) {
                 if (!$$[$0].group || !$$[$0].group.map || !$$[$0].group.map(groupVar => getExpressionId(groupVar)).includes(getExpressionId(usedVar))) {
-                  throw Error("Use of ungrouped variable in projection of operation (?" + getExpressionId(usedVar) + ")");
+                  // throw Error("Use of ungrouped variable in projection of operation (?" + getExpressionId(usedVar) + ")");
+                  console.warn("Use of ungrouped variable in projection of operation (?" + getExpressionId(usedVar) + ")");
                 }
               }
             }
