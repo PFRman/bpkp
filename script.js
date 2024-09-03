@@ -5,6 +5,12 @@ const keywords = await fetch("src/keywords.txt")
     .then(res => res.text())
     .then(text => text.split("\n").map(line => line.trim()));
 
+const builtInCalls = await fetch("src/BuiltInCalls.txt")
+    .then(res => res.text())
+    .then(text => text.split("\n").map(line => line.trim()));
+
+const aggregates = [ "COUNT(", "SUM(", "MIN(", "MAX(", "AVG(", "SAMPLE(", "GROUP_CONCAT(" ];
+
 const triplePattern =
 new RegExp(/(?<subj>\S+)\s+(?<pred>\S+)\s+(?<obj>\S+)\s*\./g);
 
@@ -73,7 +79,7 @@ export default async function documentReady() {
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
     document.querySelector("#treeSitterToggle").addEventListener("change", processQuery);
     document.querySelector("#treeSitterQuery").addEventListener("input", processQuery);
-    processQuery();
+    await processQuery();
     // autoSuggestion();
 }
 
@@ -456,7 +462,7 @@ function isInTripleBlock () {
  */
 function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     let expectedAtCursor = sJSparser.expected[cursorPosition];
-    // console.log("expectedAtCursor", cursorPosition, expectedAtCursor.slice());
+    console.log("expectedAtCursor", cursorPosition, expectedAtCursor);
     // let completionSuggestions = [];
     let otherSuggestions = [];
     const prefixes = Object.keys(sJSparser.prefixes);
@@ -473,7 +479,11 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
             suggestions = ["<"];
-        } else if (keywords.concat(".{}();,.".split("")).includes(e)) {
+        } else if (e === "BuiltInCall") {
+            suggestions = builtInCalls;
+        } else if (e === "Aggregate") {
+            suggestions = aggregates;
+        } else if (keywords.concat(".{}();,=".split("")).includes(e)) {
             // "literal"/trivial terminals
             suggestions = [e];
         } else {
