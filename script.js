@@ -73,7 +73,6 @@ export default async function documentReady() {
     // hard wrap for the textarea, so that line counting works
     document.querySelector("#query-input").wrap = "hard";
     document.querySelector("#query-input").addEventListener("input", processQuery);
-    // document.querySelector("#query-input").addEventListener("selectionchange", autoSuggestion);
     document.querySelector("#query-input").addEventListener("input", autoSuggestion);
     document.querySelector("#text-utilsToggle").addEventListener("change", processQuery);
     document.querySelector("#sparqlJsToggle").addEventListener("change", processQuery);
@@ -448,7 +447,6 @@ async function autoSuggestion () {
 
 function isInTripleBlock () {
     const tree = closeBraces();
-    console.log(tree.rootNode.toString());
     const parentType = autoSuggestTSParser.errorNode(tree).parent?.type;
     return (parentType === "triples_block" || parentType === "group_graph_pattern");
 }
@@ -508,6 +506,8 @@ function getPreviousLineEndColumnNumber (textArea) {
     return textArea.value.slice(0, textArea.selectionStart).split("\n").at(-2).trimEnd().length;
 }
 
+let tabComplete;
+
 /** Print out a suggestion list to the suggestions-<div>
  * @param {Array<string>} suggestions - The list of suggestions
  * @param {String} lastChars - last chars of the input - first chars of the currently typed literal
@@ -517,6 +517,20 @@ function printSuggestions (suggestions, lastChars, primary = false) {
     let divId = (primary ? "#primary-suggestions" : "#secondary-suggestions");
     let suggestionDiv = document.querySelector(divId);
     suggestionDiv.innerHTML = "";
+    let queryInputElement = document.querySelector("#query-input");
+    tabComplete = async function (event) {
+        if (event.key === "Tab" && suggestions.length > 0) {
+            console.log(suggestions[0]);
+            event.preventDefault();
+            queryInputElement.setRangeText(suggestions[0], queryInputElement.selectionStart - lastChars.length,
+                queryInputElement.selectionEnd, "end");
+            queryInputElement.focus();
+            suggestionDiv.innerHTML = "";
+            await autoSuggestion();
+        }
+    }
+    queryInputElement.removeEventListener("keydown", tabComplete);
+    queryInputElement.addEventListener("keydown", tabComplete, { once: true });
     for (let suggestion of suggestions) {
         let suggestionElement = document.createElement(`div`);
         suggestionElement.classList.add("suggestion");
@@ -524,11 +538,11 @@ function printSuggestions (suggestions, lastChars, primary = false) {
         suggestionElement.innerText = suggestion;
         suggestionElement.addEventListener("click",
             async function () {
-                let queryInputElement = document.querySelector("#query-input");
                 queryInputElement.setRangeText(suggestion, queryInputElement.selectionStart - lastChars.length,
                     queryInputElement.selectionEnd, "end");
                 queryInputElement.focus();
                 suggestionDiv.innerHTML = "";
+                queryInputElement.removeEventListener("keydown", tabComplete);
                 await autoSuggestion();
             });
         suggestionDiv.appendChild(suggestionElement);
