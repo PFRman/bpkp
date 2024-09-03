@@ -7,7 +7,7 @@ const keywords = await fetch("src/keywords.txt")
 
 const builtInCalls = await fetch("src/BuiltInCalls.txt")
     .then(res => res.text())
-    .then(text => text.split("\n").map(line => line.trim()));
+    .then(text => text.split("\n").map(line => line.trim().concat(" ")));
 
 const aggregates = [ "COUNT(", "SUM(", "MIN(", "MAX(", "AVG(", "SAMPLE(", "GROUP_CONCAT(" ];
 
@@ -472,7 +472,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
         let suggestions = [];
         if (e === "VAR") {
             // generatedTerminal = new RandExp(/[?$]\w/).gen();
-            suggestions = Array.from(new Set(vars.map(v => v.node.text).concat(["?"])));
+            suggestions = Array.from(new Set(vars.map(v => v.node.text + " ").concat(["?"])));
         } else if (e === "PNAME_NS") {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
@@ -483,7 +483,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
             suggestions = aggregates;
         } else if (keywords.concat(".{}();,=".split("")).includes(e)) {
             // "literal"/trivial terminals
-            suggestions = [e];
+            suggestions = [e+" "];
         } else {
             continue;
         }
@@ -581,6 +581,7 @@ function printContextSensitiveSuggestions (suggestions, lastChars, prefixes) {
                 // todo deal with non-http-iris
                 if (suggestion.qui_entity.type === "uri" && iri.startsWith("http://")) iri = "<" + iri + ">";
                 else if (suggestion.qui_entity.type === "literal") iri = '"' + iri + '"';
+                iri = iri.concat(" ");
                 queryInputElement.setRangeText(iri, queryInputElement.selectionStart - lastChars.length,
                     queryInputElement.selectionEnd, "end");
                 queryInputElement.focus();
