@@ -1,19 +1,38 @@
-# Clientside SPARQL-parser
-This webpage parses SPARQL-inputs in the browser and makes text suggestions.
+# Autocompletion for SPARQL-queries
+This webpage makes text suggestions for SPARQL-queries.
 
 ### Usage
 To use the webpage, simply start a web server in this directory, e.g.
 ```$ python3 -m http.server```
 
-### Background
-This is the first little project in my Bachelor's project, 
-supervised by Hannah Bast.
+### Features
+While typing a SPARQL-query, two types of suggestions are given beneath the input field:
 
-As a first step, I translated, modified and enhanced the SPARQL-parser, which 
-I created for exercise sheet no. 12 of the Information Retrieval
-lecture. Additionally, I added some syntax highlighting to the
-output.
+In the left column, there are grammar-derived suggestions for the next token. One example:
+when the grammar allows a variable next, all variables from the input
+so far are suggested (and filtered by the already typed prefix). The first suggestion 
+can be inserted by pressing Tab.
 
-As a second step, I integrated the 
-[SPARQL.js](https://github.com/RubenVerborgh/SPARQL.js/) parser as well as the 
-[ad-freiburg/text-utils](https://github.com/ad-freiburg/text-utils) SPARQL-parser.
+In the right column, context-sensitive suggestions for triple creation are given.
+They analyze the previously typed context and pose a query to 
+[Qlever](https://qlever.cs.uni-freiburg.de/) in order to suggest fitting entities.
+
+### How it works
+#### 1. Recognize cursor position
+To find out, which part of the query so far 
+For the suggestions, only the part until the error is used.
+
+#### 2. Next token suggestion
+The parsing table (which tells the parser what to do next) holds the information on which tokens 
+can come up next. This works similar to generating the list of expected tokens in parsing errors, but including 
+more general tokens (this means: not just terminal tokens). Besides that, this token list can be 
+gathered for any cursor position and also from a successfully parsed query.
+From these tokens, the concrete suggestions can be derived.
+
+This feature uses a modified version of the [SPARQL.js](https://github.com/RubenVerborgh/SPARQL.js/)-parser.
+
+#### 3. Context-sensitive suggestions
+By analyzing the parse tree of the (uncompleted) query, the required context can be extracted. 
+This includes "connected" triples and a potential subject and predicate of an uncompleted triple.
+
+This feature uses the [tree-sitter](https://tree-sitter.github.io/)-parser.
