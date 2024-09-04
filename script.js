@@ -303,8 +303,8 @@ function closeBraces () {
     const rightBraceQuery = autoSuggestTSParser.sparql.query(`("}" @rbrace (#eq? @rbrace "}"))`);
     const notClosedBraces = leftBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length
         - rightBraceQuery.captures(autoSuggestTSParser.tree.rootNode).length;
-    const leftParenthesesQuery = autoSuggestTSParser.sparql.query(`"{" @lbrace`);
-    const rightParenthesesQuery = autoSuggestTSParser.sparql.query(`("}" @rbrace (#eq? @rbrace "}"))`);
+    const leftParenthesesQuery = autoSuggestTSParser.sparql.query(`"(" @lparan`);
+    const rightParenthesesQuery = autoSuggestTSParser.sparql.query(`(")" @rparan (#eq? @rparan ")"))`);
     const notClosedParentheses = leftParenthesesQuery.captures(autoSuggestTSParser.tree.rootNode).length
         - rightParenthesesQuery.captures(autoSuggestTSParser.tree.rootNode).length;
     // insert unknown char (§) to produce an ERROR node (instead of a MISSING-node)
@@ -334,7 +334,8 @@ function getContextTriples () {
 
     // filter UNION 1st block
     // todo also for arbitrary sub-GGPs
-    if (errorNode.parent.parent.type === "group_or_union_graph_pattern") {
+    if (errorNode.parent.parent.type === "group_or_union_graph_pattern"
+        && errorNode.parent.previousSibling?.text === "UNION") {
         const unionTriples = triplesQuery.captures(errorNode.parent.previousNamedSibling);
         triples = triples.filter(t => !unionTriples.some(u => u.node.id === t.node.id))
     }
