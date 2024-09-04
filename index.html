@@ -40,20 +40,8 @@
             <summary>syntax highlighted</summary>
             <p id="text"></p>
         </details>
-        <details>
-            <summary>RegEx-analysis</summary>
-            <p>SELECT Variables: <span id="variables"></span></p>
-            <p>Triples: <br><span id="triples"></span></p>
-            <p id="filter"></p>
-            <p id="limit"></p>
-            <p id="offset"></p>
-            <div>Occurrences:
-                <p>Variables: <span id="vocc"></span></p>
-                <p>Non-variables: <span id="nvocc"></span></p>
-            </div>
-        </details>
         <div>
-            <details>
+            <details open>
                 <summary>Qlever-request</summary>
                 <div>
                     <p>
@@ -89,6 +77,18 @@
                 <div id="text-utilsOutput"></div>
             </details>
         </div>
+        <details>
+            <summary>RegEx-analysis</summary>
+            <p>SELECT Variables: <span id="variables"></span></p>
+            <p>Triples: <br><span id="triples"></span></p>
+            <p id="filter"></p>
+            <p id="limit"></p>
+            <p id="offset"></p>
+            <div>Occurrences:
+                <p>Variables: <span id="vocc"></span></p>
+                <p>Non-variables: <span id="nvocc"></span></p>
+            </div>
+        </details>
     </div>
     <script type="module">
         import documentReady from "./script.js";
