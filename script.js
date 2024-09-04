@@ -275,7 +275,7 @@ async function treeSitterContext () {
         `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
     )
     const context = getContextTriples();
-    console.debug(`captured Triples`, context.map(t => t.node.text));
+    console.debug(`captured Context`, context.map(t => t.node.text));
     const subjectCaptures = subjectQuery.captures(autoSuggestTSParser.tree.rootNode);
     const predicateCaptures = predicateQuery.captures(autoSuggestTSParser.tree.rootNode);
     let subject, predicate;
@@ -320,11 +320,15 @@ function getContextTriples () {
     // find ancestor SELECT (SelectQuery or SubSelect)
     const errorNode = autoSuggestTSParser.errorNode(closedBraces);
 
-    const SELECTAncestor = getAncestorOfType(errorNode, "where_clause").parent;
+    const SELECTAncestor = getAncestorOfType(errorNode, "where_clause")?.parent;
+
+    if (SELECTAncestor === null) {
+        return [];
+    }
 
     // query all triples and SubSelects inside that, that aren't part of a SubSelect
     const triplesQuery = autoSuggestTSParser.sparql.query(
-        `(triples_same_subject) @triples (group_graph_pattern (sub_select)) @subs`
+        `(triples_same_subject) @triples (group_graph_pattern (sub_select)) @subs (inline_data) @values`
     )
     let triples = triplesQuery.captures(SELECTAncestor)
         .filter(t => {
@@ -344,8 +348,8 @@ function getContextTriples () {
 
 function getAncestorOfType (node, type) {
     let parent = node.parent;
-    while (parent.type !== type) {
-        if (parent.type === "unit") return null;
+    while (parent?.type !== type) {
+        if (parent === null || parent.type === "unit") return null;
         parent = parent.parent;
     }
     return parent;
@@ -365,6 +369,7 @@ function filterContext (context, subject, predicate) {
     while (contextToCheck.length > 0 && c < context.length) {
         let freeContext = [];
         for (const contextNode of contextToCheck) {
+            console.log("type:", contextNode.node.firstNamedChild.type);
             if (contextNode.node.type === "triples_same_subject") {
                 let query = autoSuggestTSParser.sparql.query(`(triples_same_subject
                     (var)? @svar  
@@ -382,6 +387,15 @@ function filterContext (context, subject, predicate) {
                     .childrenForFieldName("bound_variable");
                 if (subqueryVars.some(v => vars.has(v.text))) {
                     subqueryVars.forEach(v => vars.add(v));
+                    contextNodes.push(contextNode);
+                } else {
+                    freeContext.push(contextNode);
+                }
+            } else if (contextNode.node.type === "inline_data") {
+                const valuesVars = contextNode.node.firstNamedChild
+                    .childrenForFieldName("bound_variable");
+                if (valuesVars.some(v => vars.has(v.text))) {
+                    valuesVars.forEach(v => vars.add(v));
                     contextNodes.push(contextNode);
                 } else {
                     freeContext.push(contextNode);
@@ -432,17 +446,9 @@ async function autoSuggestion () {
     autoSuggestTSParser.parse(slicedInput);
 
     console.debug("updated parser:", Object.assign({}, sJSparser));
-    let suggestions = getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
+    let suggestions = await getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
     printSuggestions(suggestions, lastCharsBeforeCursor);
     document.querySelector("#suggestions").scrollTop = 0;
-    document.querySelector("#context-sensitive-suggestions").innerHTML =
-        '<img src="src/ajax-loader.gif" alt="loading...">';
-    if (isInTripleBlock()) {
-        await requestQleverSuggestions(lastCharsBeforeCursor);
-    } else {
-        console.log("no triple suggestion");
-        printContextSensitiveSuggestions([], "", {})
-    }
     sparqlInputElement.focus();
 }
 
@@ -457,9 +463,9 @@ function isInTripleBlock () {
  * @param {String} sparqlInput - the parser input
  * @param {[]} cursorPosition - the position of the cursor in the input field [line, col]
  * @param {String} lastChars
- * @returns [String] - Array containing the suggestions
+ * @returns Promise<[]> - Array containing the suggestions
  */
-function getSuggestions (sparqlInput, cursorPosition, lastChars) {
+async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     let expectedAtCursor = sJSparser.expected[cursorPosition];
     console.log("expectedAtCursor", cursorPosition, expectedAtCursor);
     // let completionSuggestions = [];
@@ -468,6 +474,7 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     const vars = autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode);
     // let generatedInput;
     // const RandExp = require("randexp");
+    let iriExpected = false;
     if (expectedAtCursor === undefined) return [];
     for (let e of expectedAtCursor) {
         let suggestions = [];
@@ -478,6 +485,12 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
             suggestions = ["<"];
+            iriExpected = true;
+            if (isInTripleBlock()) {
+                await requestQleverSuggestions(lastChars);
+            } else {
+                console.log("not in triple block");
+            }
         } else if (e === "BuiltInCall") {
             suggestions = builtInCalls;
         } else if (e === "Aggregate") {
@@ -498,6 +511,10 @@ function getSuggestions (sparqlInput, cursorPosition, lastChars) {
         } else {*/
             otherSuggestions = otherSuggestions.concat(suggestions);
         //}
+    }
+    if (!iriExpected) {
+        printContextSensitiveSuggestions([], "", {});
+        console.log("no iri suggestion");
     }
     otherSuggestions = otherSuggestions.filter(s => s.toLowerCase().startsWith(lastChars.toLowerCase()));
     return /*[completionSuggestions, */otherSuggestions/*]*/;
