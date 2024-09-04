@@ -1,11 +1,11 @@
 # Autocompletion for SPARQL-queries
 This webpage makes text suggestions for SPARQL-queries.
 
-### Usage
+## Usage
 To use the webpage, simply start a web server in this directory, e.g.
 ```$ python3 -m http.server```
 
-### Features
+## Features
 While typing a SPARQL-query, two types of suggestions are given beneath the input field:
 
 In the left column, there are grammar-derived suggestions for the next token. One example:
@@ -17,14 +17,14 @@ In the right column, context-sensitive suggestions for triple creation are given
 They analyze the previously typed context and pose a query to 
 [Qlever](https://qlever.cs.uni-freiburg.de/) in order to suggest fitting entities.
 
-### How it works
-#### 1. Recognize cursor position
+## How it works
+### 1. Recognize cursor position
 In order to give helpful suggestions, one needs to distinguish between the prefix of the actual query and 
 the prefix of the currently seeked token. This separating position is either the position of the lexing error, 
 or the last whitespace (or, more generally, word boundary). To gather the syntactic and semantic context,
 only the part until the separating position is used and then filtered by the typed prefix.
 
-#### 2. Next token suggestion
+### 2. Next token suggestion
 The parsing table (which tells the parser what to do next) holds the information on which tokens 
 can come up next. This works similar to generating the list of expected tokens in parsing errors, but including 
 more general tokens (this means: not just terminal tokens). Besides that, this token list can be 
@@ -33,7 +33,7 @@ From these tokens, the concrete suggestions can be derived.
 
 This feature uses a modified version of the [SPARQL.js](https://github.com/RubenVerborgh/SPARQL.js/)-parser.
 
-#### 3. Context-sensitive suggestions
+### 3. Context-sensitive suggestions
 By analyzing the parse tree of the (uncompleted) query, the required context can be extracted. 
 This includes "connected" triples and a potential subject and predicate of an uncompleted triple.
 
