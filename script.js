@@ -272,7 +272,7 @@ async function treeSitterContext () {
     const subjectQuery = autoSuggestTSParser.sparql.query(
         `(ERROR [(var) (rdf_literal) (boolean_literal) (nil) (iri_reference) (prefixed_name) (integer) (decimal) (double) (blank_node_label) (anon)] @subject)`);
     const predicateQuery = autoSuggestTSParser.sparql.query(
-        `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path)] @pred)`
+        `(ERROR [(var) (iri_reference) (prefixed_name) (path_element) (binary_path) "a"] @pred)`
     )
     const context = getContextTriples();
     console.debug(`captured Context`, context.map(t => t.node.text));
@@ -369,7 +369,7 @@ function filterContext (context, subject, predicate) {
     while (contextToCheck.length > 0 && c < context.length) {
         let freeContext = [];
         for (const contextNode of contextToCheck) {
-            console.log("type:", contextNode.node.firstNamedChild.type);
+            console.log("type of contextNode:", contextNode.node.firstNamedChild.type);
             if (contextNode.node.type === "triples_same_subject") {
                 let query = autoSuggestTSParser.sparql.query(`(triples_same_subject
                     (var)? @svar  
