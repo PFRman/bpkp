@@ -19,8 +19,10 @@ They analyze the previously typed context and pose a query to
 
 ### How it works
 #### 1. Recognize cursor position
-To find out, which part of the query so far 
-For the suggestions, only the part until the error is used.
+In order to give helpful suggestions, one needs to distinguish between the prefix of the actual query and 
+the prefix of the currently seeked token. This separating position is either the position of the lexing error, 
+or the last whitespace (or, more generally, word boundary). To gather the syntactic and semantic context,
+only the part until the separating position is used and then filtered by the typed prefix.
 
 #### 2. Next token suggestion
 The parsing table (which tells the parser what to do next) holds the information on which tokens 
