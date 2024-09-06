@@ -5,6 +5,10 @@ This webpage makes text suggestions for SPARQL-queries.
 To use the webpage, simply start a web server in this directory, e.g.
 ```$ python3 -m http.server```
 
+You can also containerize the app and let [docker](https://www.docker.com/) do it: <br>
+```$ docker build -t bpkp . ```<br>
+```$ docker run -d -p 8000:8000 --rm --name bpkp bpkp```
+
 ## Features
 While typing a SPARQL-query, two types of suggestions are given beneath the input field:
 
