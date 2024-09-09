@@ -31,7 +31,9 @@ let sACParser = { // does it have to be global?
             this.vstack = [results.result];
             this.expected = results.allExpected;
             this.accepted = true;
+            document.querySelector("#query-input").style.borderColor = "green";
         } catch (e) {
+            document.querySelector("#query-input").style.borderColor = "gray";
             if (e.hash === undefined) throw e;
             this.result = undefined;
             this.prefixes = e.hash.prefixes;
@@ -140,7 +142,6 @@ async function processQuery() {
         else if (obj.charAt(0) === `?`) occurrences[obj] = [`t${t}.object`];
         else nonVars.push(`t${t}.object="${obj}"`);
     }
-    // vars = Object.keys(occurrences);
     document.querySelector("#vocc").textContent = JSON.stringify(occurrences, null, 2);
     document.querySelector("#nvocc").textContent = nonVars.toString();
 
@@ -199,14 +200,12 @@ function sparqlJsParse (sparqlInput, silent = false) {
             document.querySelector("#sparqlJsOutput").textContent = JSON.stringify(result, null, 2);
             // console.log("parsed: ", JSON.stringify(result, null, 2));
             console.log("sparql.js time: ", sparqlJsTime);
-            document.querySelector("#query-input").style.borderColor = "green";
         }
         return result;
     } catch (e) {
         if (!silent) {
             document.querySelector("#sparqlJsOutput").innerHTML
                 = `<span class="error">Parse Error (see console)</span>`;
-            document.querySelector("#query-input").style.borderColor = "gray";
             console.log(e);
         }
     }
@@ -360,11 +359,11 @@ function filterContext (context, subject, predicate) {
     if (subject?.node.type !== "var" && predicate?.node.type !== "var") {
         return [];
     }
-    let vars = new Set();
+    let contextVars = new Set();
     let contextToCheck = context.slice();
     let contextNodes = []
-    if (subject?.node.type === "var") vars.add(subject.node.text);
-    if (predicate?.node.type === "var") vars.add(predicate.node.text);
+    if (subject?.node.type === "var") contextVars.add(subject.node.text);
+    if (predicate?.node.type === "var") contextVars.add(predicate.node.text);
 
     let c = 0;
     while (contextToCheck.length > 0 && c < context.length) {
@@ -378,8 +377,8 @@ function filterContext (context, subject, predicate) {
                     (_(_(var)? @pvar 
                     (_ (var)? @ovar))) )`);
                 let tripleVars = query.captures(contextNode.node).map(v => v.node.text);
-                if (tripleVars.some(v => vars.has(v))) {
-                    tripleVars.forEach(v => vars.add(v));
+                if (tripleVars.some(v => contextVars.has(v))) {
+                    tripleVars.forEach(v => contextVars.add(v));
                     contextNodes.push(contextNode);
                 } else {
                     freeContext.push(contextNode);
@@ -387,8 +386,8 @@ function filterContext (context, subject, predicate) {
             } else if (contextNode.node.firstNamedChild.type === "sub_select") {
                 const subqueryVars = contextNode.node.firstNamedChild.firstNamedChild
                     .childrenForFieldName("bound_variable");
-                if (subqueryVars.some(v => vars.has(v.text))) {
-                    subqueryVars.forEach(v => vars.add(v));
+                if (subqueryVars.some(v => contextVars.has(v.text))) {
+                    subqueryVars.forEach(v => contextVars.add(v));
                     contextNodes.push(contextNode);
                 } else {
                     freeContext.push(contextNode);
@@ -396,8 +395,8 @@ function filterContext (context, subject, predicate) {
             } else if (contextNode.node.type === "inline_data") {
                 const valuesVars = contextNode.node.firstNamedChild
                     .childrenForFieldName("bound_variable");
-                if (valuesVars.some(v => vars.has(v.text))) {
-                    valuesVars.forEach(v => vars.add(v));
+                if (valuesVars.some(v => contextVars.has(v.text))) {
+                    valuesVars.forEach(v => contextVars.add(v));
                     contextNodes.push(contextNode);
                 } else {
                     freeContext.push(contextNode);
@@ -473,14 +472,15 @@ async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     // let completionSuggestions = [];
     let otherSuggestions = [];
     const prefixes = Object.keys(sACParser.prefixes);
-    const vars = autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode);
+    const vars = Array.from(new Set(
+        autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode)));
     // let generatedInput;
     let iriExpected = false;
     if (expectedAtCursor === undefined) return [];
     for (let e of expectedAtCursor) {
         let suggestions = [];
-        if (e === "VAR1" || e === "VAR2") {
-            suggestions = Array.from(new Set(vars.map(v => v.node.text + " ").concat(["?"])));
+        if (e === "Var") {
+            suggestions = vars.map(v => v.node.text + " ").concat(["?"]);
         } else if (e === "PNAME_NS") {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
         } else if (e === "IRIREF") {
