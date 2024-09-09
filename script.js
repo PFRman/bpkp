@@ -192,7 +192,7 @@ function sparqlJsParse (sparqlInput, silent = false) {
     const parser = new SJSParser();
     try {
         let startTime = performance.now();
-        let result = parser.parse(sparqlInput).result;
+        let result = parser.parse(sparqlInput);
         let endTime = performance.now();
         let sparqlJsTime = endTime - startTime;
         if (!silent) {
@@ -475,7 +475,6 @@ async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     const prefixes = Object.keys(sACParser.prefixes);
     const vars = autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode);
     // let generatedInput;
-    // const RandExp = require("randexp");
     let iriExpected = false;
     if (expectedAtCursor === undefined) return [];
     for (let e of expectedAtCursor) {
