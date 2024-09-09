@@ -18,9 +18,10 @@ const QLEVER_TIMEOUT = 15000;
 
 let definedPrefixes = [];
 
-let SparqlParser = require('sparqljs').Parser;
-let sJSparser = { // does it have to be global?
-    parser: new SparqlParser(),
+const SJSParser = require('sparqljs').Parser;
+let SparqlACParser = sparqlAcParser.Parser;
+let sACParser = { // does it have to be global?
+    parser: new SparqlACParser(),
     accepted: false,
     update(parseInput) {
         try {
@@ -188,7 +189,7 @@ function syntaxHighlight (input) {
  * @returns the parser output */
 function sparqlJsParse (sparqlInput, silent = false) {
     console.log("SPARQL.js: ");
-    const parser = new SparqlParser();
+    const parser = new SJSParser();
     try {
         let startTime = performance.now();
         let result = parser.parse(sparqlInput).result;
@@ -415,7 +416,7 @@ async function autoSuggestion () {
     // console.log("autoSuggestion:");
     let sparqlInputElement = document.querySelector("#query-input");
     const sparqlInput = sparqlInputElement.value.slice(0, sparqlInputElement.selectionStart);
-    sJSparser.update(sparqlInput);
+    sACParser.update(sparqlInput);
     let slicedInput;
     let lastCharsBeforeCursor;
     let pos = sparqlInputElement.selectionStart;
@@ -426,9 +427,9 @@ async function autoSuggestion () {
     }
     // console.log("pos:", pos);
     // console.log("errorpos:", parser.errorpos)
-    if (!sJSparser.accepted && sJSparser.errorpos < pos) {
-        slicedInput = sparqlInput.slice(0, sJSparser.errorpos);
-        lastCharsBeforeCursor = sparqlInput.slice(sJSparser.errorpos, sparqlInputElement.selectionStart);
+    if (!sACParser.accepted && sACParser.errorpos < pos) {
+        slicedInput = sparqlInput.slice(0, sACParser.errorpos);
+        lastCharsBeforeCursor = sparqlInput.slice(sACParser.errorpos, sparqlInputElement.selectionStart);
     } else {
         slicedInput = sparqlInput.slice(0, pos + 1);
         lastCharsBeforeCursor = sparqlInput.slice(pos + 1, sparqlInputElement.selectionStart);
@@ -443,10 +444,10 @@ async function autoSuggestion () {
         line = line - 1;
     }
     suggestionInput = slicedInput;
-    sJSparser.update(slicedInput);
+    sACParser.update(slicedInput);
     autoSuggestTSParser.parse(slicedInput);
 
-    console.debug("updated parser:", Object.assign({}, sJSparser));
+    console.debug("updated parser:", Object.assign({}, sACParser));
     let suggestions = await getSuggestions(sparqlInput, [line, col], lastCharsBeforeCursor); // is sparqlInput better than slicedInput?
     printSuggestions(suggestions, lastCharsBeforeCursor);
     document.querySelector("#suggestions").scrollTop = 0;
@@ -467,11 +468,11 @@ function isInTripleBlock () {
  * @returns Promise<[]> - Array containing the suggestions
  */
 async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
-    let expectedAtCursor = sJSparser.expected[cursorPosition];
+    let expectedAtCursor = sACParser.expected[cursorPosition];
     console.log("expectedAtCursor", cursorPosition, expectedAtCursor);
     // let completionSuggestions = [];
     let otherSuggestions = [];
-    const prefixes = Object.keys(sJSparser.prefixes);
+    const prefixes = Object.keys(sACParser.prefixes);
     const vars = autoSuggestTSParser.sparql.query(`(var) @var`).captures(autoSuggestTSParser.tree.rootNode);
     // let generatedInput;
     // const RandExp = require("randexp");
@@ -479,8 +480,7 @@ async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
     if (expectedAtCursor === undefined) return [];
     for (let e of expectedAtCursor) {
         let suggestions = [];
-        if (e === "VAR") {
-            // generatedTerminal = new RandExp(/[?$]\w/).gen();
+        if (e === "VAR1" || e === "VAR2") {
             suggestions = Array.from(new Set(vars.map(v => v.node.text + " ").concat(["?"])));
         } else if (e === "PNAME_NS") {
             suggestions = (prefixes.length > 0 ? prefixes.map(p => p + ":") : ["rdfs:"]);
@@ -489,10 +489,6 @@ async function getSuggestions (sparqlInput, cursorPosition, lastChars) {
             iriExpected = true;
             await requestQleverSuggestions(lastChars);
             // todo distinguish between general iris and GraphTerms
-        } else if (e === "BuiltInCall") {
-            suggestions = builtInCalls;
-        } else if (e === "Aggregate") {
-            suggestions = aggregates;
         } else if (keywords.concat(".{}();,=*a".split("")).includes(e)) {
             // "literal"/trivial terminals
             suggestions = [e+" "];
@@ -628,10 +624,10 @@ async function requestQleverSuggestions (lastChars) {
         try {
             let value = "";
             let requestPrefixes= "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
-            for (const prefix in sJSparser.prefixes) {
-                requestPrefixes += `PREFIX ${prefix}: <${sJSparser.prefixes[prefix]}>\n`;
+            for (const prefix in sACParser.prefixes) {
+                requestPrefixes += `PREFIX ${prefix}: <${sACParser.prefixes[prefix]}>\n`;
             }
-            const vstack = sJSparser.vstack;
+            const vstack = sACParser.vstack;
             console.log("vstack: ", vstack.slice());
             /* if (vstack.length < 8) {
                 printContextSensitiveSuggestions([], "", {})
@@ -643,7 +639,7 @@ async function requestQleverSuggestions (lastChars) {
             if (isInTripleBlock()) {
                 const tSContext = await treeSitterContext();
                 // const previousTriples = vstack[6];
-                const previousTriples = sJSparser.contextTriples;
+                const previousTriples = sACParser.contextTriples;
                 // console.log("previousTriples (rule application):", previousTriples);
                 // console.log("previousTriples (vstack):", vstack[6]);
                 // console.log("Context (tree sitter query):", tSContext.context);
@@ -732,7 +728,7 @@ async function requestQleverSuggestions (lastChars) {
             if (currentCounter > lastQleverRequest) {
                 lastQleverRequest = currentCounter;
                 console.log("suggestions #" + currentCounter, response.results.bindings)
-                printContextSensitiveSuggestions(response.results.bindings, lastChars, sJSparser.prefixes);
+                printContextSensitiveSuggestions(response.results.bindings, lastChars, sACParser.prefixes);
             }
         } catch (e) {
             if (currentCounter > lastQleverRequest && currentCounter >= qleverRequestCounter-1) {
