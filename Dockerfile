@@ -1,7 +1,17 @@
 # syntax=docker/dockerfile:1
+FROM node AS base
 
-ARG PYTHON_VERSION=3.12.5
-FROM python:${PYTHON_VERSION}-slim AS base
+WORKDIR /app
+
+RUN npm init -y
+RUN npm install --save-dev jison && npm install --save-dev terser
+
+WORKDIR content
+COPY . .
+
+RUN make generate
+
+FROM python:3.12.5-slim AS run
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -10,7 +20,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # the application crashes without emitting any logs due to buffering.
 ENV PYTHONUNBUFFERED=1
 
+RUN apt-get update && apt-get install make
+
 WORKDIR /app
+
+COPY --from=base /app/content /app
 
 # Create a non-privileged user that the app will run under.
 # See https://docs.docker.com/go/dockerfile-user-best-practices/
@@ -34,4 +48,4 @@ COPY . .
 EXPOSE 8000
 
 # Run the application.
-CMD ["python3", "-m", "http.server"]
+CMD ["make", "run"]
