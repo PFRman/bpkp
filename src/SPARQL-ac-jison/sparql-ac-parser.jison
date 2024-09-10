@@ -5,14 +5,14 @@ parser.invertedSymbols = Object.keys(parser.symbols_).reduce((inv, token) => {
         inv[parser.symbols_[token]] = token; return inv;
     }, {});
 
-/** Overwrite the jison-parse-function. All modification compared to the original function are marked with //< //> or ///
-*/
+// Overwrite the jison-parse-function. All modification compared to the original function are marked with //< //> or ///
+// also replaced all var with let
 parser.parse = function parse(input) {
-    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
-    var args = lstack.slice.call(arguments, 1);
-    var lexer = Object.create(this.lexer);
-    var sharedState = { yy: {} };
-    for (var k in this.yy) {
+    let self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    let args = lstack.slice.call(arguments, 1);
+    let lexer = Object.create(this.lexer);
+    let sharedState = { yy: {} };
+    for (let k in this.yy) {
         if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
             sharedState.yy[k] = this.yy[k];
         }
@@ -23,9 +23,9 @@ parser.parse = function parse(input) {
     if (typeof lexer.yylloc == 'undefined') {
         lexer.yylloc = {};
     }
-    var yyloc = lexer.yylloc;
+    let yyloc = lexer.yylloc;
     lstack.push(yyloc);
-    var ranges = lexer.options && lexer.options.ranges;
+    let ranges = lexer.options && lexer.options.ranges;
     if (typeof sharedState.yy.parseError === 'function') {
         this.parseError = sharedState.yy.parseError;
     } else {
@@ -38,14 +38,14 @@ parser.parse = function parse(input) {
     }
     _token_stack:
         var lex = function () {
-            var token;
+            let token;
             token = lexer.lex() || EOF;
             if (typeof token !== 'number') {
                 token = self.symbols_[token] || token;
             }
             return token;
         };
-    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    let symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
     //< Collect Expected always, not just when an error occurs
     let allExpected = {};
     let allExpectedTerminals = {};
@@ -85,7 +85,7 @@ parser.parse = function parse(input) {
             action = table[state] && table[state][symbol];
         }
                     if (typeof action === 'undefined' || !action.length || !action[0]) {
-                var errStr = '';
+                let errStr = '';
                 expected = [];
                 for (p in table[state]) {
                     if (this.terminals_[p] && p > TERROR) {
@@ -95,7 +95,7 @@ parser.parse = function parse(input) {
                 if (lexer.showPosition) {
                     errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
                 } else {
-                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol === EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
                 this.parseError(errStr, {
                     text: lexer.match,
@@ -165,6 +165,7 @@ parser.parse = function parse(input) {
                     result: r,
                     allExpected: allExpected,
                 };
+                //>
             }
             if (len) {
                 stack = stack.slice(0, -1 * len * 2);
@@ -281,7 +282,7 @@ SPACES_COMMENTS       (\s+|{COMMENT}\n\r?)+
 "*"                      return '*'
 "CONSTRUCT"              return 'CONSTRUCT'
 "WHERE"                  return 'WHERE'
-"{"                      return '{'
+"{"                      { console.log("left brace"); return '{'}
 "}"                      return '}'
 "DESCRIBE"               return 'DESCRIBE'
 "ASK"                    return 'ASK'
@@ -966,7 +967,7 @@ ConstructTriples
 ;
 
 TriplesSameSubject
-    : VarOrTerm PropertyListNotEmpty
+    : VarOrTerm PropertyListNotEmpty { console.log("triple", $1, $2) }
 | TriplesNode PropertyList
 ;
 
@@ -996,7 +997,7 @@ Object
 ;
 
 TriplesSameSubjectPath
-    : VarOrTerm PropertyListPathNotEmpty
+    : VarOrTerm PropertyListPathNotEmpty { console.log("triple", $1, $2) }
 | TriplesNodePath PropertyListPath
 ;
 
