@@ -6,10 +6,11 @@ To use the webpage, simply start a web server in this directory, e.g.
 ```$ python3 -m http.server```
 
 You can also containerize the app and let [docker](https://www.docker.com/) do it: <br>
-```$ docker build -t bpkp . ```<br>
-```$ docker run -d -p 8000:8000 --rm --name bpkp bpkp```
-
-## Features
+```bash
+$ docker build -t bpkp .
+$ docker run -d -p 8000:8000 --rm --name bpkp bpkp
+```
+## Features 
 While typing a SPARQL-query, two types of suggestions are given beneath the input field:
 
 In the left column, there are grammar-derived suggestions for the next token. One example:
@@ -35,7 +36,7 @@ more general tokens (this means: not just terminal tokens). Besides that, this t
 gathered for any cursor position and also from a successfully parsed query.
 From these tokens, the concrete suggestions can be derived.
 
-This feature uses a modified version of the [SPARQL.js](https://github.com/RubenVerborgh/SPARQL.js/)-parser.
+This feature is based on a [Jison](https://gerhobbelt.github.io/jison/about/)-generated parser.
 
 ### 3. Context-sensitive suggestions
 By analyzing the parse tree of the (uncompleted) query, the required context can be extracted. 

@@ -1,7 +1,12 @@
 DIR = src/SPARQL-ac-jison
 
 help:
-	@echo "make generate:"
+	@echo "Possible make commands:"
+	@echo
+	@echo "make help"
+	@echo "display this message"
+	@echo
+	@echo "make generate"
 	@echo "let jison generate the Parser-JS for Autocompletion and minify it"
 	@echo "reads from src/SPARQL-ac-jison/sparql-ac-parser.jison"
 	@echo "writes src/SPARQL-ac-jison/sparql-ac-parser.js and src/SPARQL-ac-jison/sparql-ac-parser.min.js"
