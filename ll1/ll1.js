@@ -1,18 +1,31 @@
-const testGrammar = {
-    terminals: ["+", "*", "(", ")", "id"],
-    productions: {
+const testGrammar = new Grammar (
+    ["+", "*", "(", ")", "id"],
+    {
         E: [["T", "Ed"]],
         Ed: [["+", "T", "Ed"], "€"],
         T: [["F", "Td"]],
         Td: [["*", "F", "Td"], "€"],
         F: [["(", "E", ")"], ["id"]]
     },
-    start: "E",
+    "E"
+)
+
+/**
+ *
+ * @param {Array} terminals - An array with all terminal symbols in the grammar
+ * @param {Object} productions
+ * @param start - the start symbol of the grammar
+ * @constructor
+ */
+function Grammar (terminals, productions, start) {
+    this.terminals = terminals;
+    this.productions = productions;
+    this.start = start;
 }
 
 /** Generate the FIRST-set for each token
  *
- * @param {Object} grammar
+ * @param {Grammar} grammar
  * @returns {Object} - An Object where the tokens are the keys and the corresponding Sets are the values.
  */
 function getTokenFirstSets (grammar) {
@@ -22,7 +35,6 @@ function getTokenFirstSets (grammar) {
     }
     Object.keys(grammar.productions).forEach(t => firsts[t] = new Set());
     let hasUpdated = true;
-    let i = 0;
     while (hasUpdated) {
         hasUpdated = false;
         for (const symbol in grammar.productions) {
@@ -42,7 +54,6 @@ function getTokenFirstSets (grammar) {
             })
             hasUpdated = hasUpdated || oldFirsts.symmetricDifference(firsts[symbol]).size !== 0;
         }
-        i++;
     }
     return firsts;
 }
@@ -65,36 +76,43 @@ function getStringFirstSet (string, firsts) {
     return first;
 }
 
-/** Generate the FOLLOW-set for each non-terminal
+/** Generate the FOLLOW-set for each non-terminal symbol
  *
- * @param {Object} grammar
+ * @param {Grammar} grammar
  * @param {Object} firsts
- * @returns {Object}
+ * @returns {Object} - An Object where the tokens are the keys and the corresponding Sets are the values.
  */
 function getFollowSets (grammar, firsts) {
-    let follow = {};
-    Object.keys(grammar.productions).forEach(t => firsts[t] = new Set());
-    follow[grammar.start] = new Set("$");
-    for (const symbol in grammar.productions) {
-        const production = grammar.productions[symbol];
-        production.forEach((token, i) => {
-            if (grammar.terminals.includes(token)) { // no FOLLOW-set for terminals
-                return;
-            }
-            if (production[i+1]) {
-                follow[token] = follow[token]
-                    .union(getStringFirstSet(production.slice(i+1), firsts))
-                    .difference(new Set(["€"]));
-            }
-            if (i === production.length - 1 ||
-                (production[i+1] && getStringFirstSet(production.slice(i+1), firsts).has("€"))) {
-                follow[token] = follow[token].union(follow[symbol]);
-            }
-        })
-
+    let follows = {};
+    Object.keys(grammar.productions).forEach(t => follows[t] = new Set());
+    follows[grammar.start] = new Set("$");
+    let hasUpdated = true;
+    while (hasUpdated) {
+        hasUpdated = false;
+        for (const symbol in grammar.productions) {
+            const productions = grammar.productions[symbol];
+            productions.filter(p => p !== "€").forEach(production => {
+                production.forEach((token, i) => {
+                    const oldFollows = new Set(follows[token]);
+                    if (grammar.terminals.includes(token)) { // no FOLLOW-set for terminals
+                        return;
+                    }
+                    if (production[i + 1]) {
+                        follows[token] = follows[token]
+                            .union(getStringFirstSet(production.slice(i + 1), firsts))
+                            .difference(new Set(["€"]));
+                    }
+                    if (i === production.length - 1 ||
+                        (production[i + 1] && getStringFirstSet(production.slice(i + 1), firsts).has("€"))) {
+                        follows[token] = follows[token].union(follows[symbol]);
+                    }
+                    hasUpdated = hasUpdated || oldFollows.symmetricDifference(follows[token]).size !== 0;
+                });
+            });
+        }
     }
-    return follow;
+    return follows;
 }
 
 // for jest
-module.exports = { getTokenFirstSets, getStringFirstSet};
+module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets };
