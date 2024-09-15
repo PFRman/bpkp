@@ -1,15 +1,3 @@
-const testGrammar = new Grammar (
-    ["+", "*", "(", ")", "id"],
-    {
-        E: [["T", "Ed"]],
-        Ed: [["+", "T", "Ed"], "€"],
-        T: [["F", "Td"]],
-        Td: [["*", "F", "Td"], "€"],
-        F: [["(", "E", ")"], ["id"]]
-    },
-    "E"
-)
-
 /**
  *
  * @param {Array} terminals - An array with all terminal symbols in the grammar
@@ -114,5 +102,38 @@ function getFollowSets (grammar, firsts) {
     return follows;
 }
 
+/** Create a parse table for grammar using firsts and follows
+ *
+ * @param {Grammar} grammar
+ * @param {Object} firsts
+ * @param {Object} follows
+ * @returns {Object<Object>} - the parse table, each non-terminal has a row, each terminal a column.
+ * Access entries with parseTable[non-terminal][terminal].
+ */
+function getParseTable (grammar, firsts, follows) {
+    let parseTable = {};
+    for (const symbol in grammar.productions) {
+        parseTable[symbol] = {};
+        grammar.productions[symbol].forEach(production => {
+            if (production === "€") {
+                follows[symbol].forEach((terminal) => {
+                    parseTable[symbol][terminal] = production;
+                });
+            } else {
+                getStringFirstSet(production, firsts).forEach(token => {
+                    if (grammar.terminals.includes(token)) {
+                        parseTable[symbol][token] = production;
+                    }
+                });
+            }
+        });
+    }
+    return parseTable;
+}
+
+function parse (tokens, grammar, firsts, follows) {
+
+}
+
 // for jest
-module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets };
+module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable };

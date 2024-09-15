@@ -1,4 +1,4 @@
-const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets } = require("./ll1");
+const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable } = require("./ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }
@@ -130,3 +130,45 @@ function sortSubSets (obj) {
     })
     return newObject;
 }
+
+test(`parseTable0`, () => {
+    let testGrammar = new Grammar([], {}, "");
+    let parseTable = getParseTable(testGrammar, {});
+    expect(parseTable).toEqual({});
+})
+
+test(`parseTable1`, () => {
+    // example from the dragon book
+    const testGrammar = new Grammar (
+        ["+", "*", "(", ")", "id"],
+        {
+            E: [["T", "Ed"]],
+            Ed: [["+", "T", "Ed"], "€"],
+            T: [["F", "Td"]],
+            Td: [["*", "F", "Td"], "€"],
+            F: [["(", "E", ")"], ["id"]]
+        },
+        "E"
+    );
+    const firsts = {
+        "+": new Set(["+"]),
+        "*": new Set(["*"]),
+        "(": new Set(["("]),
+        ")": new Set([")"]),
+        "id": new Set(["id"]),
+        "F": new Set(["(", "id"]),
+        "T": new Set(["(", "id"]),
+        "E": new Set(["(", "id"]),
+        "Ed": new Set(["+", "€"]),
+        "Td": new Set(["*", "€"]),
+    };
+    const follows = getFollowSets(testGrammar, firsts);
+    const expectedParseTable = {
+        E: { "id": ["T", "Ed"], "(": ["T", "Ed"] },
+        Ed: { "+": ["+", "T", "Ed"], ")": "€", "$": "€" },
+        T: { "id": ["F", "Td"], "(": ["F", "Td"] },
+        Td: { "+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€" },
+        F: { "id": ["id"], "(": ["(", "E", ")"] }
+    };
+    expect(getParseTable(testGrammar, firsts, follows)).toEqual(expectedParseTable);
+})
