@@ -131,9 +131,29 @@ function getParseTable (grammar, firsts, follows) {
     return parseTable;
 }
 
-function parse (tokens, grammar, firsts, follows) {
-
+function parse (tokens, parseTable, grammar) {
+    let stack = [grammar.start, "$"];
+    let input = tokens.concat(["$"]);
+    let ip = 0;
+    let x = stack[0];
+    while (x !== "$") {
+        if (x === input[ip]) {
+            stack.shift();
+            ip++;
+        } else if (grammar.terminals.includes(x)) {
+            throw new Error(`Unexpected token ${x}`);
+        } else if (!(parseTable[x] && parseTable[x][input[ip]])) {
+            throw new Error(`Unexpected token ${x}`);
+        } else {
+            const production = parseTable[x][input[ip]];
+            console.log(`Applied ${x} --> ${production}`)
+            stack.shift();
+            if (production !== "€") stack = production.concat(stack);
+        }
+        x = stack[0];
+    }
+    console.log("success");
 }
 
 // for jest
-module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable };
+module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse };

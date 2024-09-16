@@ -1,4 +1,5 @@
-const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable } = require("./ll1");
+const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable,
+    parse} = require("./ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }
@@ -171,4 +172,32 @@ test(`parseTable1`, () => {
         F: { "id": ["id"], "(": ["(", "E", ")"] }
     };
     expect(getParseTable(testGrammar, firsts, follows)).toEqual(expectedParseTable);
+})
+
+test(`parse0`, () => {
+    expect(() => parse([], {}, new Grammar([], {}, ""))).toThrow(/Unexpected token/);
+})
+
+test(`parse1`, () => {
+    const testInput = ["id", "+", "id", "*", "id"];
+    // example from the dragon book
+    const testGrammar = new Grammar (
+        ["+", "*", "(", ")", "id"],
+        {
+            E: [["T", "Ed"]],
+            Ed: [["+", "T", "Ed"], "€"],
+            T: [["F", "Td"]],
+            Td: [["*", "F", "Td"], "€"],
+            F: [["(", "E", ")"], ["id"]]
+        },
+        "E"
+    );
+    const testParseTable = {
+        E: {"id": ["T", "Ed"], "(": ["T", "Ed"]},
+        Ed: {"+": ["+", "T", "Ed"], ")": "€", "$": "€"},
+        T: {"id": ["F", "Td"], "(": ["F", "Td"]},
+        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€"},
+        F: {"id": ["id"], "(": ["(", "E", ")"]}
+    };
+    expect(() => parse(testInput, testParseTable, testGrammar)).not.toThrow();
 })
