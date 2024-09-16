@@ -1,3 +1,6 @@
+const JisonLex = require('jison-lex');
+const fs = require('fs');
+
 /**
  *
  * @param {Array} terminals - An array with all terminal symbols in the grammar
@@ -136,8 +139,12 @@ function parse (tokens, parseTable, grammar) {
     let input = tokens.concat(["$"]);
     let ip = 0;
     let x = stack[0];
+    let log = [];
     while (x !== "$") {
+        let token = sparqlLexer.lex();
+        console.log(token);
         if (x === input[ip]) {
+            log.push(`Consumed ${x}`);
             stack.shift();
             ip++;
         } else if (grammar.terminals.includes(x)) {
@@ -146,14 +153,19 @@ function parse (tokens, parseTable, grammar) {
             throw new Error(`Unexpected token ${x}`);
         } else {
             const production = parseTable[x][input[ip]];
-            console.log(`Applied ${x} --> ${production}`)
+            log.push(`Applied ${x} --> ${production}`);
             stack.shift();
             if (production !== "€") stack = production.concat(stack);
         }
         x = stack[0];
     }
-    console.log("success");
+    log.push("success");
+    return log;
 }
 
 // for jest
 module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse };
+
+let grammar = fs.readFileSync('bpkp/ll1/sparql.l', 'utf8');
+let sparqlLexer = new JisonLex(grammar);
+sparqlLexer.setInput("SELECT ?test ?test2 WHERE { ?test1 rdf:type <yoho> }")
