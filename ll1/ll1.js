@@ -134,25 +134,26 @@ function getParseTable (grammar, firsts, follows) {
     return parseTable;
 }
 
-function parse (tokens, parseTable, grammar) {
+function parse (input, parseTable, grammar, lexerRules) {
     let stack = [grammar.start, "$"];
-    let input = tokens.concat(["$"]);
-    let ip = 0;
+    const sparqlLexer = new JisonLex(lexerRules);
+    sparqlLexer.setInput(input);
     let x = stack[0];
     let log = [];
+    let token = sparqlLexer.lex();
     while (x !== "$") {
-        let token = sparqlLexer.lex();
-        console.log(token);
-        if (x === input[ip]) {
+        log.push('stack: '+ stack)
+        log.push('token: '+ token);
+        if (x === token) {
             log.push(`Consumed ${x}`);
             stack.shift();
-            ip++;
+            token = sparqlLexer.lex();
         } else if (grammar.terminals.includes(x)) {
             throw new Error(`Unexpected token ${x}`);
-        } else if (!(parseTable[x] && parseTable[x][input[ip]])) {
+        } else if (!(parseTable[x] && parseTable[x][token])) {
             throw new Error(`Unexpected token ${x}`);
         } else {
-            const production = parseTable[x][input[ip]];
+            const production = parseTable[x][token];
             log.push(`Applied ${x} --> ${production}`);
             stack.shift();
             if (production !== "€") stack = production.concat(stack);
@@ -166,6 +167,4 @@ function parse (tokens, parseTable, grammar) {
 // for jest
 module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse };
 
-let grammar = fs.readFileSync('bpkp/ll1/sparql.l', 'utf8');
-let sparqlLexer = new JisonLex(grammar);
-sparqlLexer.setInput("SELECT ?test ?test2 WHERE { ?test1 rdf:type <yoho> }")
+//let grammar = fs.readFileSync('bpkp/ll1/sparql.l', 'utf8');

@@ -175,11 +175,12 @@ test(`parseTable1`, () => {
 })
 
 test(`parse0`, () => {
-    expect(() => parse([], {}, new Grammar([], {}, ""))).toThrow(/Unexpected token/);
+    expect(() => parse("", {}, new Grammar([], {}, ""), {rules: []}))
+        .toThrow(/Unexpected token/);
 })
 
 test(`parse1`, () => {
-    const testInput = ["id", "+", "id", "*", "id"];
+    const testInput = "foo+bar*test";
     // example from the dragon book
     const testGrammar = new Grammar (
         ["+", "*", "(", ")", "id"],
@@ -199,5 +200,49 @@ test(`parse1`, () => {
         Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€"},
         F: {"id": ["id"], "(": ["(", "E", ")"]}
     };
-    expect(() => parse(testInput, testParseTable, testGrammar)).not.toThrow();
+    let lexerRules = {
+        rules: [
+            ["\\+", "return '+';"],
+            ["\\*", "return '*';"],
+            ["\\(", "return '(';"],
+            ["\\)", "return ')';"],
+            ["[a-zA-Z][a-zA-Z0-9]*", "return 'id';"],
+            ["$", "return '$';"]
+        ]
+    }
+    expect(() => parse(testInput, testParseTable, testGrammar, lexerRules)).not.toThrow();
+})
+
+test(`parse2`, () => {
+    const testInput = "id+*id";
+    // example from the dragon book
+    const testGrammar = new Grammar (
+        ["+", "*", "(", ")", "id"],
+        {
+            E: [["T", "Ed"]],
+            Ed: [["+", "T", "Ed"], "€"],
+            T: [["F", "Td"]],
+            Td: [["*", "F", "Td"], "€"],
+            F: [["(", "E", ")"], ["id"]]
+        },
+        "E"
+    );
+    const testParseTable = {
+        E: {"id": ["T", "Ed"], "(": ["T", "Ed"]},
+        Ed: {"+": ["+", "T", "Ed"], ")": "€", "$": "€"},
+        T: {"id": ["F", "Td"], "(": ["F", "Td"]},
+        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€"},
+        F: {"id": ["id"], "(": ["(", "E", ")"]}
+    };
+    let lexerRules = {
+        rules: [
+            ["\\+", "return '+';"],
+            ["\\*", "return '*';"],
+            ["\\(", "return '(';"],
+            ["\\)", "return ')';"],
+            ["[a-zA-Z][a-zA-Z0-9]*", "return 'id';"],
+            ["$", "return '$';"]
+        ]
+    }
+    expect(() => parse(testInput, testParseTable, testGrammar, lexerRules)).toThrow(/Unexpected token /);
 })
