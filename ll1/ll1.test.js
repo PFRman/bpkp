@@ -175,8 +175,8 @@ test(`parseTable1`, () => {
 })
 
 test(`parse0`, () => {
-    expect(() => parse("", {}, new Grammar([], {}, ""), {rules: []}))
-        .toThrow(/Unexpected token/);
+    expect(parse("", {}, new Grammar([], {}, ""), {rules: []}).at(-1))
+        .toMatch(/Unexpected token/);
 })
 
 test(`parse1`, () => {
@@ -210,7 +210,7 @@ test(`parse1`, () => {
             ["$", "return '$';"]
         ]
     }
-    expect(() => parse(testInput, testParseTable, testGrammar, lexerRules)).not.toThrow();
+    expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toEqual("success");
 })
 
 test(`parse2`, () => {
@@ -244,5 +244,5 @@ test(`parse2`, () => {
             ["$", "return '$';"]
         ]
     }
-    expect(() => parse(testInput, testParseTable, testGrammar, lexerRules)).toThrow(/Unexpected token /);
+    expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toMatch(/Unexpected token /);
 })
