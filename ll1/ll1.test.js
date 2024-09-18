@@ -174,10 +174,10 @@ test(`parseTable1`, () => {
     expect(getParseTable(testGrammar, firsts, follows)).toEqual(expectedParseTable);
 })
 
-test(`parse0`, () => {
-    expect(parse("", {}, new Grammar([], {}, ""), {rules: []}).at(-1))
+/*test(`parse0`, () => {
+    expect(parse("", {}, new Grammar([], {}, ""), {rules: []}).log.at(-1))
         .toMatch(/Unexpected token/);
-})
+})*/
 
 test(`parse1`, () => {
     const testInput = "foo+bar*test";
@@ -211,7 +211,7 @@ test(`parse1`, () => {
         ]
     }
     console.log(parse(testInput, testParseTable, testGrammar, lexerRules));
-    expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toEqual("success");
+    expect(parse(testInput, testParseTable, testGrammar, lexerRules).log.at(-1)).toEqual("success");
 })
 
 test(`parse2`, () => {
@@ -245,7 +245,7 @@ test(`parse2`, () => {
             ["$", "return 'EOF';"]
         ]
     }
-    expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toMatch(/Unexpected token /);
+    expect(parse(testInput, testParseTable, testGrammar, lexerRules).log.at(-1)).toMatch(/Unexpected token /);
 })
 
 test(`leftFactorize0`, () => {

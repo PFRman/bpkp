@@ -147,7 +147,7 @@ function getParseTable (grammar, firsts, follows) {
  * @param {{}} parseTable
  * @param {Grammar} grammar
  * @param {(String|Object)} lexerRules
- * @returns {String[]} The parsing log
+ * @returns {Object} The parsing log
  */
 function parse (input, parseTable, grammar, lexerRules) {
     let stack = [grammar.start, EOF];
@@ -155,20 +155,23 @@ function parse (input, parseTable, grammar, lexerRules) {
     sparqlLexer.setInput(input);
     let x = stack[0];
     let log = [];
+    let expected = new Set();
     let token = sparqlLexer.lex();
     while (x !== EOF) {
-        log.push('stack: '+ stack)
+        log.push('stack: '+ stack);
         log.push('token: '+ token);
+        expected = expected.union(new Set(parseTable[x] ? Object.keys(parseTable[x]) : [x]));
         if (x === token) {
             log.push(`Consumed ${x}`);
             stack.shift();
             token = sparqlLexer.lex();
+            expected.clear();
         } else if (grammar.terminals.includes(x)) {
-            log.push(`Unexpected token ${token}`);
-            return log;
+            log.push(`Unexpected token "${token}", expected: "${x}"`);
+            return { log: log, expected: expected };
         } else if (!(parseTable[x] && parseTable[x][token])) {
-            log.push(`Unexpected token ${token}`);
-            return log;
+            log.push(`Unexpected token "${token}", expected: "${Object.keys(parseTable[x])}"`);
+            return { log: log, expected: expected };
         } else {
             const production = parseTable[x][token];
             log.push(`Applied ${x} --> ${production}`);
@@ -178,7 +181,10 @@ function parse (input, parseTable, grammar, lexerRules) {
         x = stack[0];
     }
     log.push("success");
-    return log;
+    return {
+        log: log,
+        expected: expected
+    };
 }
 
 /** Read the grammar from filePath and transform it into a {@link Grammar}
@@ -251,6 +257,8 @@ Grammar.prototype.leftFactorize = function () {
     return this;
 }
 
+// todo Grammar.prototype.checkForLeftRecursion = function (): Boolean
+
 
 const grammar = readGrammar('./sparql.y');
 const lexerRules = fs.readFileSync('./sparql.l', 'utf8');
@@ -258,22 +266,28 @@ grammar.leftFactorize();
 const firsts = getTokenFirstSets(grammar);
 const follows = getFollowSets(grammar, firsts);
 const parseTable = getParseTable(grammar, firsts, follows);
-const log = parse(`
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+const parsed = parse(`
+PREFIX wikibase: <http://wikiba.se/ontology#>
+PREFIX psn: <http://www.wikidata.org/prop/statement/value-normalized/>
 PREFIX wd: <http://www.wikidata.org/entity/>
 PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {
-{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {
-?person wdt:P31 wd:Q5 .
-?person rdfs:label ?qui_entity .
-} GROUP BY ?qui_entity }
-OPTIONAL { ?qui_entity @en@rdfs:label ?name }
-BIND (?qui_entity AS ?alias)
-FILTER (REGEX(STR(?name), "^Alber", "i") || REGEX(STR(?alias), "^Alber", "i"))} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)
-LIMIT 40
+PREFIX p: <http://www.wikidata.org/prop/>
+SELECT DISTINCT ?country ?country_name ?mountain ?mountain_name ?max_height WHERE {
+  { SELECT ?country (MAX(?height) AS ?max_height) WHERE {
+    ?mountain wdt:P31/wdt:P279* wd:Q8502 .
+    ?mountain p:P2044/psn:P2044/wikibase:quantityAmount ?height .
+    ?mountain wdt:P17 ?country .
+  } GROUP BY ?country }
+  ?mountain wdt:P31/wdt:P279* wd:Q8502 .
+  ?mountain p:P2044/psn:P2044/wikibase:quantityAmount ?max_height .
+  ?mountain wdt:P17 ?country .
+  ?mountain rdfs:label ?mountain_name FILTER (LANG(?mountain_name) = "en")
+  ?country rdfs:label ?country_name FILTER (LANG(?country_name) = "en")
+}
 `, parseTable, grammar, lexerRules);
-console.log(log.slice(-30));
+console.log("log:", parsed.log.slice(-50));
+console.log("expected: ", parsed.expected);
 
 // for jest
 module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse, EOF };
