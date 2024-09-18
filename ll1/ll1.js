@@ -2,9 +2,10 @@ const JisonLex = require('jison-lex');
 const ebnfParser = require('ebnf-parser');
 const fs = require('fs');
 
-/**
+/** Represents a context-free grammar
  *
- * @param {Array} terminals - An array with all terminal symbols in the grammar
+ * @constructor
+ * @param {Array<String>} terminals - An array with all terminal symbols in the grammar
  * @param {Object} productions
  * @param start - the start symbol of the grammar
  * @constructor
@@ -117,7 +118,7 @@ function getFollowSets (grammar, firsts) {
  * @param {Grammar} grammar
  * @param {Object} firsts
  * @param {Object} follows
- * @returns {Object<Object>} - the parse table, each non-terminal has a row, each terminal a column.
+ * @returns {Object<String, Object<String, Array>>} - the parse table, each non-terminal has a row, each terminal a column.
  * Access entries with parseTable[non-terminal][terminal].
  */
 function getParseTable (grammar, firsts, follows) {
@@ -140,13 +141,13 @@ function getParseTable (grammar, firsts, follows) {
     return parseTable;
 }
 
-/** Parse (and lex) the input string according to the parseTable, the grammar and the lexerRules
+/** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the {@link lexerRules}
  *
  * @param {String} input
  * @param {{}} parseTable
  * @param {Grammar} grammar
- * @param {String|Object} lexerRules
- * @returns {*[]} The parsing log
+ * @param {(String|Object)} lexerRules
+ * @returns {String[]} The parsing log
  */
 function parse (input, parseTable, grammar, lexerRules) {
     let stack = [grammar.start, EOF];
@@ -180,6 +181,11 @@ function parse (input, parseTable, grammar, lexerRules) {
     return log;
 }
 
+/** Read the grammar from filePath and transform it into a {@link Grammar}
+ *
+ * @param {String} filePath
+ * @returns {Grammar}
+ */
 function readGrammar(filePath) {
     const grammarInput = fs.readFileSync(filePath, 'utf8');
     const parsedGrammar = ebnfParser.parse(grammarInput);
