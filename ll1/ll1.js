@@ -16,7 +16,7 @@ function Grammar (terminals, productions, start) {
 }
 
 const emptyString = "€";
-const EOF = "$"
+const EOF = "EOF"
 
 /** Generate the FIRST-set for each token
  *
@@ -41,7 +41,7 @@ function getTokenFirstSets (grammar) {
                     let hasEpsilon = false;
                     for (const token of production) {
                         firsts[symbol] = firsts[symbol].union(
-                            firsts[token].difference(new Set(emptyString))
+                            firsts[token].difference(new Set([emptyString]))
                         );
                         hasEpsilon = firsts[token].has(emptyString);
                         if (!hasEpsilon) break;
@@ -62,12 +62,12 @@ function getTokenFirstSets (grammar) {
  * @returns {Set<String>}
  */
 function getStringFirstSet (string, firsts) {
-    if (string === emptyString) return new Set(emptyString);
+    if (string === emptyString) return new Set([emptyString]);
     let first = new Set();
     let hasEpsilon = false;
     for (const symbol of string) {
         hasEpsilon = firsts[symbol].has(emptyString);
-        first = first.union(firsts[symbol].difference(new Set(emptyString)));
+        first = first.union(firsts[symbol].difference(new Set([emptyString])));
         if (!hasEpsilon) break;
     }
     if (hasEpsilon) first.add(emptyString);
@@ -83,7 +83,7 @@ function getStringFirstSet (string, firsts) {
 function getFollowSets (grammar, firsts) {
     let follows = {};
     Object.keys(grammar.productions).forEach(t => follows[t] = new Set());
-    follows[grammar.start] = new Set(EOF);
+    follows[grammar.start] = new Set([EOF]);
     let hasUpdated = true;
     while (hasUpdated) {
         hasUpdated = false;
@@ -140,6 +140,14 @@ function getParseTable (grammar, firsts, follows) {
     return parseTable;
 }
 
+/** Parse (and lex) the input string according to the parseTable, the grammar and the lexerRules
+ *
+ * @param {String} input
+ * @param {{}} parseTable
+ * @param {Grammar} grammar
+ * @param {String|Object} lexerRules
+ * @returns {*[]} The parsing log
+ */
 function parse (input, parseTable, grammar, lexerRules) {
     let stack = [grammar.start, EOF];
     const sparqlLexer = new JisonLex(lexerRules);
@@ -155,10 +163,10 @@ function parse (input, parseTable, grammar, lexerRules) {
             stack.shift();
             token = sparqlLexer.lex();
         } else if (grammar.terminals.includes(x)) {
-            log.push(`Unexpected token ${x}`);
+            log.push(`Unexpected token ${token}`);
             return log;
         } else if (!(parseTable[x] && parseTable[x][token])) {
-            log.push(`Unexpected token ${x}`);
+            log.push(`Unexpected token ${token}`);
             return log;
         } else {
             const production = parseTable[x][token];
@@ -196,12 +204,70 @@ function readGrammar(filePath) {
     );
 }
 
-const grammar = readGrammar('/Users/wende/Uni/bachelorprojekt/kickoff-parser/bpkp/ll1/sparql.y');
-const lexerRules = fs.readFileSync('/Users/wende/Uni/bachelorprojekt/kickoff-parser/bpkp/ll1/sparql.l', 'utf8');
+/** Left-factorizes the grammar in place
+ *
+ * @returns {Grammar}
+ */
+Grammar.prototype.leftFactorize = function () {
+    let hasChanged = true;
+    while (hasChanged) {
+        hasChanged = false;
+        for (const symbol in this.productions) {
+            let productions = this.productions[symbol].filter(p => p !== emptyString);
+            while (productions[0]) {
+                const production = productions.shift();
+                let samePrefix = [];
+                productions.forEach(otherProd => {
+                    if (otherProd.at(0) === production.at(0)) samePrefix.push(otherProd);
+                });
+                if(samePrefix.length === 0) continue;
+
+                // determine the length of the prefix
+                let i;
+                for (i = 1; i < production.length; i++) {
+                    if (!samePrefix.every(p => p[i] === production[i])) break;
+                }
+
+                samePrefix.unshift(production);
+                const suffixProductions = samePrefix.map(p => p.slice(i)).map(p => (p.length === 0 ? "€" : p));
+                const newSymbol = symbol + '_LF' + this.productions[symbol].indexOf(production);
+                const newProductions = [
+                    [...production.slice(0, i), newSymbol],
+                    ...this.productions[symbol].filter(p => !samePrefix.includes(p))
+                ]
+                this.productions[newSymbol] = suffixProductions;
+                this.productions[symbol] = newProductions;
+                productions = productions.filter(p => !samePrefix.includes(p));
+                hasChanged = true;
+            }
+        }
+    }
+    return this;
+}
+
+
+const grammar = readGrammar('./sparql.y');
+const lexerRules = fs.readFileSync('./sparql.l', 'utf8');
+grammar.leftFactorize();
 const firsts = getTokenFirstSets(grammar);
 const follows = getFollowSets(grammar, firsts);
 const parseTable = getParseTable(grammar, firsts, follows);
-const log = parse("PREFIX wdt: <http://www.wikidata.org/prop/direct/>\nSELECT * WHERE {}", parseTable, grammar, lexerRules);
-console.log(log);
+const log = parse(`
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?qui_entity (SAMPLE(?name) as ?qui_name) (SAMPLE(?alias) as ?qui_alias) (SAMPLE(?count) as ?qui_count) WHERE {
+{ SELECT ?qui_entity (COUNT(?qui_entity) AS ?count) WHERE {
+?person wdt:P31 wd:Q5 .
+?person rdfs:label ?qui_entity .
+} GROUP BY ?qui_entity }
+OPTIONAL { ?qui_entity @en@rdfs:label ?name }
+BIND (?qui_entity AS ?alias)
+FILTER (REGEX(STR(?name), "^Alber", "i") || REGEX(STR(?alias), "^Alber", "i"))} GROUP BY ?qui_entity ORDER BY DESC(?qui_count)
+LIMIT 40
+`, parseTable, grammar, lexerRules);
+console.log(log.slice(-30));
+
 // for jest
-module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse };
+module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse, EOF };

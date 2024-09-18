@@ -1,5 +1,5 @@
 const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable,
-    parse} = require("./ll1");
+    parse, EOF} = require("./ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }
@@ -85,7 +85,7 @@ test(`firstAll€`, () => {
 test(`follow0`, () => {
     const testGrammar = { terminals: [], productions: [], start: "" };
     const firsts = {};
-    expect(getFollowSets(testGrammar, firsts)).toEqual({ "": new Set("$")})
+    expect(getFollowSets(testGrammar, firsts)).toEqual({ "": new Set([EOF])})
 })
 
 test(`follow1`, () => {
@@ -114,11 +114,11 @@ test(`follow1`, () => {
         "Td": new Set(["*", "€"]),
     };
     const expectedFollowSets = {
-        "E": new Set([")", "$"].sort()),
-        "Ed": new Set([")", "$"].sort()),
-        "T": new Set(["+", ")", "$"].sort()),
-        "Td": new Set(["+", ")", "$"].sort()),
-        "F": new Set(["+", "*", ")", "$"].sort()),
+        "E": new Set([")", EOF].sort()),
+        "Ed": new Set([")", EOF].sort()),
+        "T": new Set(["+", ")", EOF].sort()),
+        "Td": new Set(["+", ")", EOF].sort()),
+        "F": new Set(["+", "*", ")", EOF].sort()),
     }
     const followSets = sortSubSets(getFollowSets(testGrammar, firsts));
     expect(followSets).toEqual(sortSubSets(expectedFollowSets));
@@ -166,9 +166,9 @@ test(`parseTable1`, () => {
     const follows = getFollowSets(testGrammar, firsts);
     const expectedParseTable = {
         E: { "id": ["T", "Ed"], "(": ["T", "Ed"] },
-        Ed: { "+": ["+", "T", "Ed"], ")": "€", "$": "€" },
+        Ed: { "+": ["+", "T", "Ed"], ")": "€", EOF: "€" },
         T: { "id": ["F", "Td"], "(": ["F", "Td"] },
-        Td: { "+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€" },
+        Td: { "+": "€", "*": ["*", "F", "Td"], ")": "€", EOF: "€" },
         F: { "id": ["id"], "(": ["(", "E", ")"] }
     };
     expect(getParseTable(testGrammar, firsts, follows)).toEqual(expectedParseTable);
@@ -195,9 +195,9 @@ test(`parse1`, () => {
     );
     const testParseTable = {
         E: {"id": ["T", "Ed"], "(": ["T", "Ed"]},
-        Ed: {"+": ["+", "T", "Ed"], ")": "€", "$": "€"},
+        Ed: {"+": ["+", "T", "Ed"], ")": "€", EOF: "€"},
         T: {"id": ["F", "Td"], "(": ["F", "Td"]},
-        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€"},
+        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", EOF: "€"},
         F: {"id": ["id"], "(": ["(", "E", ")"]}
     };
     let lexerRules = {
@@ -207,9 +207,10 @@ test(`parse1`, () => {
             ["\\(", "return '(';"],
             ["\\)", "return ')';"],
             ["[a-zA-Z][a-zA-Z0-9]*", "return 'id';"],
-            ["$", "return '$';"]
+            ["$", "return 'EOF';"]
         ]
     }
+    console.log(parse(testInput, testParseTable, testGrammar, lexerRules));
     expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toEqual("success");
 })
 
@@ -229,9 +230,9 @@ test(`parse2`, () => {
     );
     const testParseTable = {
         E: {"id": ["T", "Ed"], "(": ["T", "Ed"]},
-        Ed: {"+": ["+", "T", "Ed"], ")": "€", "$": "€"},
+        Ed: {"+": ["+", "T", "Ed"], ")": "€", EOF: "€"},
         T: {"id": ["F", "Td"], "(": ["F", "Td"]},
-        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", "$": "€"},
+        Td: {"+": "€", "*": ["*", "F", "Td"], ")": "€", EOF: "€"},
         F: {"id": ["id"], "(": ["(", "E", ")"]}
     };
     let lexerRules = {
@@ -241,8 +242,35 @@ test(`parse2`, () => {
             ["\\(", "return '(';"],
             ["\\)", "return ')';"],
             ["[a-zA-Z][a-zA-Z0-9]*", "return 'id';"],
-            ["$", "return '$';"]
+            ["$", "return 'EOF';"]
         ]
     }
     expect(parse(testInput, testParseTable, testGrammar, lexerRules).at(-1)).toMatch(/Unexpected token /);
+})
+
+test(`leftFactorize0`, () => {
+    expect(new Grammar([], {}, "").leftFactorize()).toEqual(new Grammar([], {}, ""));
+})
+
+test(`leftFactorize1`, () => {
+    const testGrammar = new Grammar(
+        ["a", "b", "c"],
+        {
+            A: [["a", "b", "c"], ["a", "c", "b"], ["B", "c"] ],
+            B: [["b", "b", "a"], ["b", "b"], ["b", "c"], "€"]
+        },
+        "A"
+    );
+    const expectedGrammar = new Grammar(
+        ["a", "b", "c"],
+        {
+            A: [["a", "A_LF0"], ["B", "c"]],
+            A_LF0: [["b", "c"], ["c", "b"]],
+            B: [["b", "B_LF0"], "€"],
+            B_LF0: [["b", "B_LF0_LF0"], ["c"]],
+            B_LF0_LF0: [["a"], "€"]
+        },
+        "A"
+    );
+    expect(testGrammar.leftFactorize()).toEqual(expectedGrammar);
 })
