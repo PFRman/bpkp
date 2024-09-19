@@ -146,44 +146,78 @@ function getParseTable (grammar, firsts, follows) {
  * @param {{}} parseTable
  * @param {Grammar} grammar
  * @param {(String|Object)} lexerRules
- * @returns {Object} The parsing log
+ * @returns {Object} The parsing results
  */
 function parse (input, parseTable, grammar, lexerRules) {
     let stack = [grammar.start, EOF];
-    const sparqlLexer = new JisonLex(lexerRules);
-    sparqlLexer.setInput(input);
+    const lexer = new JisonLex(lexerRules);
+    lexer.setInput(input);
     let x = stack[0];
     let log = [];
-    let expected = new Set();
-    let token = sparqlLexer.lex();
+    let token = lexer.lex();
+    const rootNode = new Node(grammar.start, null);
+    let currentNode = rootNode;
+    let nodeStack = [currentNode];
+    const results = {
+        log: log,
+        expected: new Set(),
+        tree: rootNode,
+    }
+    Object.keys(collectedNodes).forEach(key => collectedNodes[key] = []);
     while (x !== EOF) {
         log.push('stack: '+ stack);
         log.push('token: '+ token);
-        expected = expected.union(new Set(parseTable[x] ? Object.keys(parseTable[x]) : [x]));
+        results.expected = results.expected.union(new Set(parseTable[x] ? Object.keys(parseTable[x]) : [x]));
+        collectedNodes[x]?.push(currentNode);
         if (x === token) {
             log.push(`Consumed ${x}`);
+            currentNode.text = lexer.match;
+            currentNode.children = null;
             stack.shift();
-            token = sparqlLexer.lex();
-            expected.clear();
+            nodeStack.shift();
+            token = lexer.lex();
+            results.expected.clear();
         } else if (grammar.terminals.includes(x)) {
             log.push(`Unexpected token "${token}", expected: "${x}"`);
-            return { log: log, expected: expected };
+            results.currentNode = currentNode;
+            return results;
         } else if (!(parseTable[x] && parseTable[x][token])) {
             log.push(`Unexpected token "${token}", expected: "${Object.keys(parseTable[x])}"`);
-            return { log: log, expected: expected };
+            results.currentNode = currentNode;
+            return results;
         } else {
             const production = parseTable[x][token];
             log.push(`Applied ${x} --> ${production}`);
             stack.shift();
-            if (production !== emptyString) stack = production.concat(stack);
+            nodeStack.shift();
+            if (production !== emptyString) {
+                stack = production.concat(stack);
+                currentNode.children = production.map(s => new Node(s, currentNode));
+                nodeStack = currentNode.children.concat(nodeStack);
+            } else {
+                currentNode.children = [new Node(emptyString, currentNode)];
+            }
         }
         x = stack[0];
+        currentNode = nodeStack[0];
     }
     log.push("success");
-    return {
-        log: log,
-        expected: expected
-    };
+    return results;
+}
+
+/** Collect all nodes of a specific type/symbol while parsing. The keys have to match exactly the symbol name
+ *
+ * @type {{Var: *[], TriplesSameSubject: *[]}}
+ */
+const collectedNodes = {
+    Var: [],
+    TriplesSameSubject: [],
+}
+
+function Node (name, parent, children=[]) {
+    this.name = name;
+    this.parent = parent;
+    this.children = children;
 }
 
 /** Read the grammar from filePath and transform it into a {@link Grammar}
@@ -267,8 +301,8 @@ async function parseQuery () {
     const parseTable = getParseTable(grammar, firsts, follows);
     const input = document.getElementById("query-input").value;
     const parsed = parse(input, parseTable, grammar, lexerRules);
-    console.log("log:", parsed.log.slice(-50));
-    console.log("expected: ", parsed.expected);
+    console.log("results:", parsed);
+    console.log("collectedNodes:", collectedNodes);
     printSuggestions(parsed.expected, "");
 }
 
@@ -277,7 +311,7 @@ function documentReady () {
 }
 
 /** Print out a suggestion list to the suggestions-<div>
- * @param {Array<string>} suggestions - The list of suggestions
+ * @param {Set<string>} suggestions - The list of suggestions
  * @param {String} lastChars - last chars of the input - first chars of the currently typed literal
  */
 function printSuggestions (suggestions, lastChars) {

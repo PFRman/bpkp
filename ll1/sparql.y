@@ -27,7 +27,7 @@ PrologueDecl
     ;
 
 Prologue
-    : %empty 
+    : %empty
     | PrologueDecl Prologue
     ;
 
@@ -62,14 +62,31 @@ SelectVar
     | '(' Expression 'AS' Var ')'
     ;
 
+//SelectVars
+//    : SelectVar
+//    | SelectVar SelectVars
+//    ;
 SelectVars
-    : SelectVar
-    | SelectVar SelectVars
+    : SelectVar SelectVarsOpt
     ;
 
+SelectVarsOpt
+    : SelectVars
+    | %empty
+    ;
+
+// SelectClause
+//     : 'SELECT' DistinctOrReducedOptional SelectVars
+//     | 'SELECT' DistinctOrReducedOptional '*'
+//     ;
+
 SelectClause
-    : 'SELECT' DistinctOrReducedOptional SelectVars 
-    | 'SELECT' DistinctOrReducedOptional '*'
+    : 'SELECT' DistinctOrReducedOptional SelectVarsOrStar
+    ;
+
+SelectVarsOrStar
+    : SelectVars
+    | '*'
     ;
 
 TriplesTemplateOptional
@@ -77,9 +94,18 @@ TriplesTemplateOptional
     | %empty
     ;
 
+//ConstructQuery
+//    : 'CONSTRUCT' ConstructTemplate DatasetClauseOptional WhereClause SolutionModifier
+//    | 'CONSTRUCT' DatasetClauseOptional 'WHERE' '{' TriplesTemplateOptional '}' SolutionModifier
+//    ;
+
 ConstructQuery
-    : 'CONSTRUCT' ConstructTemplate DatasetClauseOptional WhereClause SolutionModifier 
-    | 'CONSTRUCT' DatasetClauseOptional 'WHERE' '{' TriplesTemplateOptional '}' SolutionModifier
+    : 'CONSTRUCT' ConstructQueryRest
+    ;
+
+ConstructQueryRest
+    : ConstructTemplate DatasetClauseOptional WhereClause SolutionModifier
+    | DatasetClauseOptional 'WHERE' '{' TriplesTemplateOptional '}' SolutionModifier
     ;
 
 WhereClauseOptional
@@ -87,23 +113,50 @@ WhereClauseOptional
     | %empty
     ;
 
+//VarsOrIris
+//    : VarOrIri
+//    | VarOrIri VarsOrIris
+//    ;
+
 VarsOrIris
-    : VarOrIri
-    | VarOrIri VarsOrIris
+    : VarOrIri VarsOrIrisOpt
     ;
 
-DescribeQuery
-    : 'DESCRIBE' VarsOrIris DatasetClauseOptional WhereClauseOptional SolutionModifier
-    | 'DESCRIBE' '*' DatasetClauseOptional WhereClauseOptional SolutionModifier
+VarsOrIrisOpt
+    : %empty
+    | VarsOrIris
     ;
+
+//DescribeQuery
+//    : 'DESCRIBE' VarsOrIris DatasetClauseOptional WhereClauseOptional SolutionModifier
+//    | 'DESCRIBE' '*' DatasetClauseOptional WhereClauseOptional SolutionModifier
+//    ;
+
+DescribeQuery
+    : 'DESCRIBE' DescribeQueryRest
+    ;
+
+DescribeQueryRest
+    : VarsOrIris DatasetClauseOptional WhereClauseOptional SolutionModifier
+    | '*' DatasetClauseOptional WhereClauseOptional SolutionModifier
+    ;
+
 
 AskQuery
     : 'ASK' DatasetClauseOptional WhereClause SolutionModifier
     ;
 
+//DatasetClause
+//    : 'FROM' DefaultGraphClause
+//    | 'FROM' NamedGraphClause
+//    ;
+
 DatasetClause
-    : 'FROM' DefaultGraphClause 
-    | 'FROM' NamedGraphClause
+    : 'FROM' DatasetClauseRest;
+
+DatasetClauseRest
+    : DefaultGraphClause
+    | NamedGraphClause
     ;
 
 DefaultGraphClause
@@ -147,10 +200,20 @@ SolutionModifier
     : GroupClauseOptional HavingClauseOptional OrderClauseOptional LimitOffsetClausesOptional
     ;
 
+//GroupConditions
+//    : GroupCondition
+//    | GroupCondition GroupConditions
+//    ;
+
 GroupConditions
-    : GroupCondition
-    | GroupCondition GroupConditions
+    : GroupCondition GroupConditionsOptional
     ;
+
+GroupConditionsOptional
+    : %empty
+    | GroupConditions
+    ;
+
 
 GroupClause
     : 'GROUP' 'BY' GroupConditions
@@ -159,15 +222,21 @@ GroupClause
 GroupCondition
     : BuiltInCall 
     | FunctionCall 
-    | '(' Expression ')' 
-    | '(' Expression 'AS' Var ')'
+    | '(' Expression GroupConditionBracketRest
     | Var
+    ;
+
+GroupConditionBracketRest
+    : ')'
+    | 'AS' Var ')'
     ;
 
 HavingConditions
     : HavingCondition
     | HavingCondition HavingConditions
     ;
+
+
 
 HavingClause
     : 'HAVING' HavingConditions
@@ -950,3 +1019,4 @@ BlankNode
     : 'BLANK_NODE_LABEL' 
     | 'ANON'
     ;
+%%
