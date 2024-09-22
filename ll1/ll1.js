@@ -21,9 +21,10 @@ const EOF = "EOF"
 /** Generate the FIRST-set for each token
  *
  * @param {Grammar} grammar
+ * @param {Boolean} includeNonTerminals
  * @returns {Object} - An Object where the tokens are the keys and the corresponding Sets are the values.
  */
-function getTokenFirstSets (grammar) {
+function getTokenFirstSets (grammar, includeNonTerminals=false) {
     let firsts = {}
     for (const terminal of grammar.terminals) {
         firsts[terminal] = new Set([terminal]);
@@ -40,6 +41,7 @@ function getTokenFirstSets (grammar) {
                 } else {
                     let hasEpsilon = false;
                     for (const token of production) {
+                        if (includeNonTerminals) firsts[symbol].add(token);
                         firsts[symbol] = firsts[symbol].union(
                             firsts[token].difference(new Set([emptyString]))
                         );
@@ -78,9 +80,10 @@ function getStringFirstSet (string, firsts) {
  *
  * @param {Grammar} grammar
  * @param {Object} firsts
+ * @param {Boolean} includeNonTerminals
  * @returns {Object} - An Object where the tokens are the keys and the corresponding Sets are the values.
  */
-function getFollowSets (grammar, firsts) {
+function getFollowSets (grammar, firsts, includeNonTerminals=false) {
     let follows = {};
     Object.keys(grammar.productions).forEach(t => follows[t] = new Set());
     follows[grammar.start] = new Set([EOF]);
@@ -96,9 +99,10 @@ function getFollowSets (grammar, firsts) {
                         return;
                     }
                     if (production[i + 1]) {
-                        follows[token] = follows[token]
-                            .union(getStringFirstSet(production.slice(i + 1), firsts))
-                            .difference(new Set([emptyString]));
+                        if (includeNonTerminals) follows[token].add(production[i + 1]);
+                        follows[token] = follows[token].union(
+                            getStringFirstSet(production.slice(i + 1), firsts).difference(new Set([emptyString]))
+                        );
                     }
                     if (i === production.length - 1 ||
                         (production[i + 1] && getStringFirstSet(production.slice(i + 1), firsts).has(emptyString))) {
@@ -211,13 +215,30 @@ function parse (input, parseTable, grammar, lexerRules) {
  */
 const collectedNodes = {
     Var: [],
-    TriplesSameSubject: [],
+    TriplesSameSubjectPath: [],
 }
 
 function Node (name, parent, children=[]) {
     this.name = name;
     this.parent = parent;
     this.children = children;
+}
+
+Node.prototype.parentOfType = function (type) {
+    let parent = this.parent;
+    while (parent) {
+        if (parent.name === type) return parent;
+        parent = parent.parent;
+    }
+}
+
+Node.prototype.getText = function() {
+    if (this.text) return this.text;
+    let text = "";
+    for (const child of this.children) {
+        text = text.concat(child.getText());
+    }
+    return text;
 }
 
 /** Read the grammar from filePath and transform it into a {@link Grammar}
@@ -291,22 +312,27 @@ Grammar.prototype.leftFactorize = function () {
 }
 
 // todo Grammar.prototype.checkForLeftRecursion = function (): Boolean
-
-async function parseQuery () {
-    const grammar = await readGrammar('./sparql.y');
-    const lexerRules = await fetch('./sparql.l').then(res => res.text());
+let grammar, lexerRules, parseTable;
+async function initParser () {
+    grammar = await readGrammar('./sparql.y');
+    lexerRules = await fetch('./sparql.l').then(res => res.text());
     grammar.leftFactorize();
     const firsts = getTokenFirstSets(grammar);
     const follows = getFollowSets(grammar, firsts);
-    const parseTable = getParseTable(grammar, firsts, follows);
+    parseTable = getParseTable(grammar, firsts, follows);
+}
+
+async function parseQuery () {
     const input = document.getElementById("query-input").value;
     const parsed = parse(input, parseTable, grammar, lexerRules);
+    getContext(parsed.currentNode);
     console.log("results:", parsed);
     console.log("collectedNodes:", collectedNodes);
     printSuggestions(parsed.expected, "");
 }
 
-function documentReady () {
+async function documentReady () {
+    await initParser();
     document.querySelector("#query-input").addEventListener("input", parseQuery);
 }
 
@@ -348,8 +374,36 @@ function printSuggestions (suggestions, lastChars) {
     }
 }
 
+/**
+ *
+ * @param {Node} currentNode
+ */
+function getContext(currentNode, lastNode) {
+    const allFirsts = getTokenFirstSets(grammar, true);
+    const allFollows = getFollowSets(grammar, allFirsts, true);
+    console.log("allFirsts", allFirsts);
+    console.log("allFollows", allFollows);
+    if (currentNode === undefined) return;
+    if (currentNode.name === "PropertyListPathNotEmpty") {
+        // predicate suggestion
+        const subjectNode = currentNode.parent.children.find(n => n.name === "VarOrTerm");
+        document.querySelector("#subject").innerHTML = subjectNode.getText();
+    }
+    // todo: take follow set of current node?
+    if (currentNode.name === "PathElt_LF0") {
+        const tripleNode = currentNode.parentOfType("TriplesSameSubjectPath");
+        const subjectNode = tripleNode.children.find(n => n.name === "VarOrTerm");
+        const predicateNode = currentNode.parentOfType("VerbPathOrSimple");
+        document.querySelector("#subject").innerHTML = escape(subjectNode.getText());
+        document.querySelector("#predicate").innerHTML = escape(predicateNode.getText());
+    }
+}
 
-if (typeof module !== 'undefined' && require.main === module) {
+function escape (str) {
+    return str.replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
+}
+
+if (typeof module !== 'undefined') {
     // for jest
     module.exports = {Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse, EOF};
 }
