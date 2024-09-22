@@ -1,5 +1,6 @@
 const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable,
-    parse, EOF} = require("./ll1");
+    parse, EOF, getEBNFTokenFirstSets, getEBNFFollowSets, Optional, Choice, OneOrMore, ZeroOrMore, Token, Chain,
+    transformFromEBNF} = require("./ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }
@@ -210,7 +211,6 @@ test(`parse1`, () => {
             ["$", "return 'EOF';"]
         ]
     }
-    console.log(parse(testInput, testParseTable, testGrammar, lexerRules));
     expect(parse(testInput, testParseTable, testGrammar, lexerRules).log.at(-1)).toEqual("success");
 })
 
@@ -273,4 +273,227 @@ test(`leftFactorize1`, () => {
         "A"
     );
     expect(testGrammar.leftFactorize()).toEqual(expectedGrammar);
+})
+
+
+test(`getEBNFTokenFirstSets1`, () => {
+    const testGrammar = new Grammar(
+        ['SELECT', 'DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', "="],
+        {
+            SelectClause: new Chain(
+                new Token('SELECT'),
+                new Optional(new Choice(new Token('DISTINCT'), new Token('REDUCED'))),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(new Token('('), new Token('Expression'), new Token('AS'), new Token('Var'), new Token(')'))
+                    )),
+                    new Token('*')
+                )
+            ),
+            Var: new Token('VAR'),
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(new Token('||'), new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                new Token('NUMBER'),
+                new ZeroOrMore(new Choice(
+                    new Chain(new Token('='), new Token('NUMBER')),
+                    new Chain(new Token('='), new Token('NUMBER')),
+                ))
+            )
+        },
+        "SelectClause"
+    )
+    const expectedFirsts = {
+        "SelectClause": new Set(['SELECT']),
+        "Var": new Set(['VAR']),
+        "Expression": new Set(['NUMBER']),
+        "ValueLogical": new Set(['NUMBER']),
+        'SELECT': new Set(['SELECT']),
+        'DISTINCT': new Set(['DISTINCT']),
+        'REDUCED': new Set(['REDUCED']),
+        'VAR': new Set(['VAR']),
+        '(': new Set(['(']),
+        'AS': new Set(['AS']),
+        ')': new Set([')']),
+        '*': new Set(['*']),
+        '||': new Set(['||']),
+        'NUMBER': new Set(['NUMBER']),
+        "=": new Set(["="])
+    }
+    expect(getEBNFTokenFirstSets(testGrammar)).toEqual(expectedFirsts);
+})
+
+test(`getEBNFTokenFirstSets2`, () => {
+    const testGrammar = new Grammar(
+        ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', "="],
+        {
+            SelectClause: new Chain(
+                new Optional(new Choice(new Token('DISTINCT'), new Token('REDUCED'))),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(new Token('('), new Token('Expression'), new Token('AS'), new Token('Var'), new Token(')'))
+                    )),
+                    new Token('*')
+                )
+            ),
+            Var: new Token('VAR'),
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(new Token('||'), new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                new Token('NUMBER'),
+                new ZeroOrMore(new Choice(
+                    new Chain(new Token('='), new Token('NUMBER')),
+                    new Chain(new Token('='), new Token('NUMBER')),
+                ))
+            )
+        },
+        "SelectClause"
+    )
+    const expectedFirsts = {
+        "SelectClause": new Set(['DISTINCT', 'REDUCED', 'VAR', '(', '*']),
+        "Var": new Set(['VAR']),
+        "Expression": new Set(['NUMBER']),
+        "ValueLogical": new Set(['NUMBER']),
+        'DISTINCT': new Set(['DISTINCT']),
+        'REDUCED': new Set(['REDUCED']),
+        'VAR': new Set(['VAR']),
+        '(': new Set(['(']),
+        'AS': new Set(['AS']),
+        ')': new Set([')']),
+        '*': new Set(['*']),
+        '||': new Set(['||']),
+        'NUMBER': new Set(['NUMBER']),
+        "=": new Set(["="])
+    }
+    expect(getEBNFTokenFirstSets(testGrammar)).toEqual(expectedFirsts);
+})
+
+test(`getEBNFTokenFollowSets1`, () => {
+    const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', "="];
+    const terminals = {};
+    testTerminals.forEach(terminal => {
+        terminals[terminal] = new Token(terminal, true);
+    })
+    const testGrammar = new Grammar(
+        testTerminals,
+        {
+            SelectClause: new Chain(
+                new Optional(new Choice(terminals['DISTINCT'], terminals['REDUCED'])),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(terminals['('], new Token('Expression'), terminals['AS'], new Token('Var'), terminals[')'])
+                    )),
+                    terminals['*']
+                )
+            ),
+            Var: terminals['VAR'],
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(terminals['||'], new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                terminals['NUMBER'],
+                new ZeroOrMore(new Choice(
+                    new Chain(terminals['='], new Token('NUMBER', true)),
+                    new Chain(terminals['='], new Token('NUMBER', true)),
+                ))
+            )
+        },
+        "SelectClause"
+    )
+    const firsts = {
+        "SelectClause": new Set(['DISTINCT', 'REDUCED', 'VAR', '(', '*']),
+        "Var": new Set(['VAR']),
+        "Expression": new Set(['NUMBER']),
+        "ValueLogical": new Set(['NUMBER']),
+        'DISTINCT': new Set(['DISTINCT']),
+        'REDUCED': new Set(['REDUCED']),
+        'VAR': new Set(['VAR']),
+        '(': new Set(['(']),
+        'AS': new Set(['AS']),
+        ')': new Set([')']),
+        '*': new Set(['*']),
+        '||': new Set(['||']),
+        'NUMBER': new Set(['NUMBER']),
+        "=": new Set(["="])
+    }
+    const expectedFollows = sortSubSets({
+        "SelectClause": new Set([EOF]),
+        "Var": new Set(['(', ')', 'VAR', EOF]),
+        "Expression": new Set(['AS']),
+        "ValueLogical": new Set(['||', 'AS']),
+    })
+    expect(sortSubSets(getEBNFFollowSets(testGrammar, firsts))).toEqual(expectedFollows);
+})
+
+test(`transformFromEBNF`, () => {
+    const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', '=', '!='];
+    const terminals = {};
+    testTerminals.forEach(terminal => {
+        terminals[terminal] = new Token(terminal, true);
+    });
+    const testGrammar = new Grammar(
+        testTerminals,
+        {
+            SelectClause: new Chain(
+                new Optional(new Choice(terminals['DISTINCT'], terminals['REDUCED'])),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(terminals['('], new Token('Expression'), terminals['AS'], new Token('Var'), terminals[')'])
+                    )),
+                    terminals['*']
+                )
+            ),
+            Var: terminals['VAR'],
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(terminals['||'], new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                terminals['NUMBER'],
+                new ZeroOrMore(new Choice(
+                    new Chain(terminals['='], new Token('NUMBER', true)),
+                    new Chain(terminals['!='], new Token('NUMBER', true)),
+                ))
+            )
+        },
+        "SelectClause"
+    );
+    const expectedGrammar = new Grammar(
+        testGrammar.terminals,
+        {
+            SelectClause: [["_SelectClauseChain"]],
+            _SelectClauseChain: [["_SelectClauseChain0Optional", "_SelectClauseChain1Choice"]],
+            _SelectClauseChain0Optional: ["€", ["_SelectClauseChain0OptionalChoice"]],
+            _SelectClauseChain0OptionalChoice: [['DISTINCT'], ['REDUCED']],
+            _SelectClauseChain1Choice: [["_SelectClauseChain1Choice0OneOrMore"], ['*']],
+            _SelectClauseChain1Choice0OneOrMore: [["_SelectClauseChain1Choice0OneOrMoreChoice",
+                "_SelectClauseChain1Choice0OneOrMoreOpt"]],
+            _SelectClauseChain1Choice0OneOrMoreOpt: ["€", ["_SelectClauseChain1Choice0OneOrMoreChoice"]],
+            _SelectClauseChain1Choice0OneOrMoreChoice:[['Var'], ["_SelectClauseChain1Choice0OneOrMoreChoice1Chain"]],
+            _SelectClauseChain1Choice0OneOrMoreChoice1Chain: [[`(`, 'Expression', 'AS', 'Var', ')']],
+            Var: [['VAR']],
+            Expression: [["_ExpressionChain"]],
+            _ExpressionChain: [['ValueLogical', "_ExpressionChain1ZeroOrMore"]],
+            _ExpressionChain1ZeroOrMore: ["€", ["_ExpressionChain1ZeroOrMoreChain", "_ExpressionChain1ZeroOrMore"]],
+            _ExpressionChain1ZeroOrMoreChain: [['||', 'ValueLogical']],
+            ValueLogical: [["_ValueLogicalChain"]],
+            _ValueLogicalChain: [['NUMBER', "_ValueLogicalChain1ZeroOrMore"]],
+            _ValueLogicalChain1ZeroOrMore: ["€", ["_ValueLogicalChain1ZeroOrMoreChoice", "_ValueLogicalChain1ZeroOrMore"]],
+            _ValueLogicalChain1ZeroOrMoreChoice: [["_ValueLogicalChain1ZeroOrMoreChoice0Chain"],
+                ["_ValueLogicalChain1ZeroOrMoreChoice1Chain"]],
+            _ValueLogicalChain1ZeroOrMoreChoice0Chain: [['=', 'NUMBER']],
+            _ValueLogicalChain1ZeroOrMoreChoice1Chain: [['!=', 'NUMBER']],
+        },
+        testGrammar.start
+    );
+    expect(transformFromEBNF(testGrammar)).toEqual(expectedGrammar);
 })
