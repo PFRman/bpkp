@@ -445,7 +445,6 @@ function parse (input, parseTable, grammar, lexerRules) {
     let token = lexer.lex();
     const rootNode = new Node(grammar.start, null);
     let currentNode = rootNode;
-    let lastNode;
     let nodeStack = [currentNode];
     const results = {
         log: log,
@@ -469,10 +468,14 @@ function parse (input, parseTable, grammar, lexerRules) {
         } else if (grammar.terminals.includes(x)) {
             log.push(`Unexpected token "${token}", expected: "${x}"`);
             results.currentNode = currentNode;
+            results.nodeStack = nodeStack;
+            results.stack = stack;
             return results;
         } else if (!(parseTable[x] && parseTable[x][token])) {
             log.push(`Unexpected token "${token}", expected: "${Object.keys(parseTable[x])}"`);
             results.currentNode = currentNode;
+            results.nodeStack = nodeStack;
+            results.stack = stack;
             return results;
         } else {
             const production = parseTable[x][token];
@@ -494,7 +497,8 @@ function parse (input, parseTable, grammar, lexerRules) {
     return results;
 }
 
-/** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the {@link lexerRules}
+/** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the
+ * {@link lexerRules}
  *
  * @param {String} input
  * @param {{}} parseTable
@@ -673,12 +677,12 @@ function transformFromEBNF (ebnfGrammar) {
 }
 
 // todo Grammar.prototype.checkForLeftRecursion = function (): Boolean
-let grammar, lexerRules, parseTable;
+let grammar, lexerRules, parseTable, firsts;
 async function initParser () {
     grammar = await readGrammar('./sparql.y');
     lexerRules = await fetch('./sparql.l').then(res => res.text());
     grammar.leftFactorize();
-    const firsts = getTokenFirstSets(grammar);
+    firsts = getTokenFirstSets(grammar);
     const follows = getFollowSets(grammar, firsts);
     parseTable = getParseTable(grammar, firsts, follows);
 }
@@ -686,9 +690,9 @@ async function initParser () {
 async function parseQuery () {
     const input = document.getElementById("query-input").value;
     const parsed = parse(input, parseTable, grammar, lexerRules);
-    getContext(parsed.currentNode);
+    getContext(parsed.currentNode, parsed.stack, firsts);
     console.log("results:", parsed);
-    console.log("collectedNodes:", collectedNodes);
+    // console.log("collectedNodes:", collectedNodes);
     printSuggestions(parsed.expected, "");
 }
 
@@ -738,26 +742,34 @@ function printSuggestions (suggestions, lastChars) {
 /**
  *
  * @param {Node} currentNode
+ * @param {Array} stack
+ * @param {Object} firsts
  */
-function getContext(currentNode, lastNode) {
-    const allFirsts = getTokenFirstSets(grammar, true);
-    const allFollows = getFollowSets(grammar, allFirsts, true);
-    console.log("allFirsts", allFirsts);
-    console.log("allFollows", allFollows);
+function getContext(currentNode, stack, firsts) {
+    // const allFirsts = getTokenFirstSets(grammar, true);
+    // const allFollows = getFollowSets(grammar, allFirsts, true);
+    const object = stack.indexOf("ObjectListPath");
     if (currentNode === undefined) return;
-    if (currentNode.name === "PropertyListPathNotEmpty") {
+    if (currentNode.name === "PropertyListPathNotEmpty" || currentNode.name === "VerbPathObjectListOptional_LF1") {
         // predicate suggestion
-        const subjectNode = currentNode.parent.children.find(n => n.name === "VarOrTerm");
+        const subjectNode = currentNode.parentOfType("TriplesSameSubjectPath").children.find(n => n.name === "VarOrTerm");
         document.querySelector("#subject").innerHTML = subjectNode.getText();
+        document.querySelector("#predicate").innerHTML = "<i>undefined</i>";
     }
-    // todo: take follow set of current node?
-    if (currentNode.name === "PathElt_LF0") {
+    // todo: Modify grammar, so that every desired information has its dedicated rule (or ebnf)?
+    else if (object === 0 || (object > 0 && getStringFirstSet(stack.slice(0, object), firsts).has("€"))) {
+        // object suggestion
         const tripleNode = currentNode.parentOfType("TriplesSameSubjectPath");
         const subjectNode = tripleNode.children.find(n => n.name === "VarOrTerm");
-        const predicateNode = currentNode.parentOfType("VerbPathOrSimple");
+        const propertyNode = currentNode.parentOfType("PropertyListPathNotEmpty");
+        const predicateNode = propertyNode.children.find(n => n.name === "VerbPathOrSimple");
         document.querySelector("#subject").innerHTML = escape(subjectNode.getText());
         document.querySelector("#predicate").innerHTML = escape(predicateNode.getText());
+    } else {
+        document.querySelector("#subject").innerHTML = "<i>undefined</i>";
+        document.querySelector("#predicate").innerHTML = "<i>undefined</i>";
     }
+
 }
 
 function escape (str) {
