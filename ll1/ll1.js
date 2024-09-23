@@ -581,19 +581,30 @@ function Node (name, parent, children=[]) {
     this.children = children;
 }
 
-Node.prototype.parentOfType = function (type) {
+Node.prototype.ancestorOfType = function (type) {
     let parent = this.parent;
     while (parent) {
         if (parent.name === type) return parent;
         parent = parent.parent;
     }
+    return null;
 }
 
-Node.prototype.getText = function() {
-    if (this.text) return this.text;
+Node.prototype.descendantsOfType = function (type) {
+    if (!this.children || this.children.length === 0) return [];
+    let descendantsOfType = [];
+    this.children.forEach(c => {
+        if (c.name === type) descendantsOfType.push(c);
+        descendantsOfType = descendantsOfType.concat(c.descendantsOfType(type));
+    })
+    return descendantsOfType;
+}
+
+Node.prototype.getText = function(delimiter="") {
+    if (this.text) return this.text.concat(delimiter);
     let text = "";
     for (const child of this.children) {
-        text = text.concat(child.getText());
+        text = text.concat(child.getText(delimiter));
     }
     return text;
 }
@@ -746,35 +757,62 @@ function printSuggestions (suggestions, lastChars) {
  * @param {Object} firsts
  */
 function suggestion(parseResults, firsts) {
-    // const allFirsts = getTokenFirstSets(grammar, true);
-    // const allFollows = getFollowSets(grammar, allFirsts, true);
     let currentNode, expected, stack;
     [currentNode, expected, stack] = [parseResults.currentNode, parseResults.expected, parseResults.stack];
 
     const object = stack.indexOf("ObjectListPath");
-    let subjectText = "<i>undefined</i>"
-    let predicateText = "<i>undefined</i>"
-    let suggestionType = "no suggestions";
+    let subjectText, predicateText, context, suggestionType;
     if (currentNode === undefined) return;
     if (currentNode.name === "PropertyListPathNotEmpty"
         || currentNode.name === "VerbPathObjectListOptional_LF1") {
         suggestionType = "predicate suggestion";
-        subjectText = escape(currentNode.parentOfType("TriplesSameSubjectPath")
+        subjectText = escape(currentNode.ancestorOfType("TriplesSameSubjectPath")
             .children.find(n => n.name === "VarOrTerm").getText());
+        context = getContextTriples(currentNode);
     }
     // todo: Modify grammar, so that every desired information has its dedicated rule (or ebnf)?
     else if (object === 0 || (object > 0 && getStringFirstSet(stack.slice(0, object), firsts).has("€"))) {
         suggestionType = "object suggestion";
-        const tripleNode = currentNode.parentOfType("TriplesSameSubjectPath");
+        const tripleNode = currentNode.ancestorOfType("TriplesSameSubjectPath");
         subjectText = escape(tripleNode.children.find(n => n.name === "VarOrTerm").getText());
-        const propertyNode = currentNode.parentOfType("PropertyListPathNotEmpty");
+        const propertyNode = currentNode.ancestorOfType("PropertyListPathNotEmpty");
         predicateText = escape(propertyNode.children.find(n => n.name === "VerbPathOrSimple").getText());
-    } else if (Array.from(firsts["iri"]).every(f => expected.has(f))) {
+        context = getContextTriples(currentNode);
+    }
+    // todo add values suggestion
+    else if (Array.from(firsts["iri"]).every(f => expected.has(f))) {
         suggestionType = "agnostic iri suggestion";
     }
-    document.querySelector("#suggestion-type").innerText = suggestionType;
-    document.querySelector("#subject").innerHTML = subjectText;
-    document.querySelector("#predicate").innerHTML = predicateText;
+    document.querySelector("#suggestion-type").innerText = suggestionType ?? "no suggestions";
+    document.querySelector("#subject").innerHTML = subjectText ?? "<i>undefined</i>";
+    document.querySelector("#predicate").innerHTML = predicateText ?? "<i>undefined</i>";
+    document.querySelector("#context").innerText = context?.map(c => c.getText(" ")).join("\n") ?? "";
+}
+
+function getContextTriples (currentNode) {
+    const SELECTAncestor = currentNode.ancestorOfType("WhereClause")?.parent;
+
+    if (SELECTAncestor === null) {
+        return [];
+    }
+    const currentTriple = currentNode.ancestorOfType("TriplesSameSubjectPath");
+    const triples = SELECTAncestor.descendantsOfType("TriplesSameSubjectPath").filter(t => t !== currentTriple);
+    const subSelects = SELECTAncestor.descendantsOfType("SubSelect");
+    let context = triples.concat(subSelects);
+    console.log("triples: ", triples.map(t => t.getText()));
+    console.log("subSelects: ", subSelects.map(s => s.getText()));
+
+    const unionBlock = currentNode.ancestorOfType("GroupOrUnionGraphPattern");
+    console.log("unionBlock: ", unionBlock);
+    if (unionBlock && unionBlock.parent.children[0].name === "UNION") {
+        const unionTriples = unionBlock.parent.parent.children[0].descendantsOfType("TriplesSameSubjectPath").concat(
+            unionBlock.parent.parent.children[0].descendantsOfType("SubSelect")
+        );
+        console.log("unionTriples: ", unionTriples.map(t => t.getText()));
+        context = context.filter(c => unionTriples.some(t => t !== c));
+    }
+    console.log(context.map(t => t.getText()));
+    return context;
 }
 
 function escape (str) {
