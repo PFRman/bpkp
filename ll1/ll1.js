@@ -428,7 +428,8 @@ function getEBNFParseTable (grammar, firsts, follows) {
     return parseTable;
 }
 
-/** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the {@link lexerRules}
+/** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the
+ * {@link lexerRules}
  *
  * @param {String} input
  * @param {{}} parseTable
@@ -690,7 +691,7 @@ async function initParser () {
 async function parseQuery () {
     const input = document.getElementById("query-input").value;
     const parsed = parse(input, parseTable, grammar, lexerRules);
-    getContext(parsed.currentNode, parsed.stack, firsts);
+    suggestion(parsed, firsts);
     console.log("results:", parsed);
     // console.log("collectedNodes:", collectedNodes);
     printSuggestions(parsed.expected, "");
@@ -741,35 +742,39 @@ function printSuggestions (suggestions, lastChars) {
 
 /**
  *
- * @param {Node} currentNode
- * @param {Array} stack
+ * @param parseResults
  * @param {Object} firsts
  */
-function getContext(currentNode, stack, firsts) {
+function suggestion(parseResults, firsts) {
     // const allFirsts = getTokenFirstSets(grammar, true);
     // const allFollows = getFollowSets(grammar, allFirsts, true);
+    let currentNode, expected, stack;
+    [currentNode, expected, stack] = [parseResults.currentNode, parseResults.expected, parseResults.stack];
+
     const object = stack.indexOf("ObjectListPath");
+    let subjectText = "<i>undefined</i>"
+    let predicateText = "<i>undefined</i>"
+    let suggestionType = "no suggestions";
     if (currentNode === undefined) return;
-    if (currentNode.name === "PropertyListPathNotEmpty" || currentNode.name === "VerbPathObjectListOptional_LF1") {
-        // predicate suggestion
-        const subjectNode = currentNode.parentOfType("TriplesSameSubjectPath").children.find(n => n.name === "VarOrTerm");
-        document.querySelector("#subject").innerHTML = subjectNode.getText();
-        document.querySelector("#predicate").innerHTML = "<i>undefined</i>";
+    if (currentNode.name === "PropertyListPathNotEmpty"
+        || currentNode.name === "VerbPathObjectListOptional_LF1") {
+        suggestionType = "predicate suggestion";
+        subjectText = escape(currentNode.parentOfType("TriplesSameSubjectPath")
+            .children.find(n => n.name === "VarOrTerm").getText());
     }
     // todo: Modify grammar, so that every desired information has its dedicated rule (or ebnf)?
     else if (object === 0 || (object > 0 && getStringFirstSet(stack.slice(0, object), firsts).has("€"))) {
-        // object suggestion
+        suggestionType = "object suggestion";
         const tripleNode = currentNode.parentOfType("TriplesSameSubjectPath");
-        const subjectNode = tripleNode.children.find(n => n.name === "VarOrTerm");
+        subjectText = escape(tripleNode.children.find(n => n.name === "VarOrTerm").getText());
         const propertyNode = currentNode.parentOfType("PropertyListPathNotEmpty");
-        const predicateNode = propertyNode.children.find(n => n.name === "VerbPathOrSimple");
-        document.querySelector("#subject").innerHTML = escape(subjectNode.getText());
-        document.querySelector("#predicate").innerHTML = escape(predicateNode.getText());
-    } else {
-        document.querySelector("#subject").innerHTML = "<i>undefined</i>";
-        document.querySelector("#predicate").innerHTML = "<i>undefined</i>";
+        predicateText = escape(propertyNode.children.find(n => n.name === "VerbPathOrSimple").getText());
+    } else if (Array.from(firsts["iri"]).every(f => expected.has(f))) {
+        suggestionType = "agnostic iri suggestion";
     }
-
+    document.querySelector("#suggestion-type").innerText = suggestionType;
+    document.querySelector("#subject").innerHTML = subjectText;
+    document.querySelector("#predicate").innerHTML = predicateText;
 }
 
 function escape (str) {
