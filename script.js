@@ -28,7 +28,7 @@ let sACParser = { // does it have to be global?
             let results = this.parser.parse(parseInput);
             this.result = results.result;
             this.prefixes = results.result.prefixes;
-            this.vstack = [results.result];
+            this.vstack = [results.result]; // deprecated (not used anymore)
             this.expected = results.allExpected;
             this.accepted = true;
             document.querySelector("#query-input").style.borderColor = "green";
@@ -37,7 +37,7 @@ let sACParser = { // does it have to be global?
             if (e.hash === undefined) throw e;
             this.result = undefined;
             this.prefixes = e.hash.prefixes;
-            this.vstack = e.hash.vstack;
+            this.vstack = e.hash.vstack; // deprecated (not used anymore)
             this.expected = e.hash.allExpected;
             this.errorpos = e.hash.matched.length - e.hash.text.length;
             this.contextTriples = e.hash.contextTriples ? e.hash.contextTriples : [];
