@@ -1,6 +1,6 @@
 const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable,
     parse, EOF, getEBNFTokenFirstSets, getEBNFFollowSets, Optional, Choice, OneOrMore, ZeroOrMore, Token, Chain,
-    transformFromEBNF} = require("./ll1");
+    transformFromEBNF} = require("../ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }

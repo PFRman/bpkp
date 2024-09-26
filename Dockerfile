@@ -4,7 +4,7 @@ FROM node AS base
 WORKDIR /app
 
 RUN npm init -y
-RUN npm install --save-dev jison && npm install --save-dev terser
+RUN npm install --save-dev browserify && npm install --save-dev terser
 
 WORKDIR content
 COPY . .

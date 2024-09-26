@@ -174,10 +174,10 @@ class Chain extends EBNFExpression {
         });
         return hasUpdated;
     }
-    parse (token, stack) {
-        stack.shift();
-        this.expressions.forEach(expression => stack.unshift(expression));
-        return true;
+    parse (input, grammar) {
+        this.expressions.forEach(expression => {
+            expression.parse(input, grammar);
+        });
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}Chain`;
@@ -202,8 +202,8 @@ class Token extends EBNFExpression {
         follows[this.value] = follows[this.value].union(parentFollow);
         return oldFollows.symmetricDifference(follows[this.value]).size !== 0;
     }
-    parse (token, stack) {
-        return true;
+    parse (input, grammar) {
+        grammar.productions[this.value].parse (input, grammar);
     }
     transform (grammar, namePrefix) {
         return this.value;
@@ -214,6 +214,9 @@ class Terminal extends Token {
     constructor(value) {
         super(value);
         this.isTerminal = true;
+    }
+    parse (input, grammar) {
+        return input[0] === this.value;
     }
 }
 
@@ -691,8 +694,8 @@ function transformFromEBNF (ebnfGrammar) {
 // todo Grammar.prototype.checkForLeftRecursion = function (): Boolean
 let grammar, lexerRules, parseTable, firsts;
 async function initParser () {
-    grammar = await readGrammar('./sparql.y');
-    lexerRules = await fetch('./sparql.l').then(res => res.text());
+    grammar = await readGrammar('src/sparql.y');
+    lexerRules = await fetch('src/sparql.l').then(res => res.text());
     grammar.leftFactorize();
     firsts = getTokenFirstSets(grammar);
     const follows = getFollowSets(grammar, firsts);
@@ -763,23 +766,25 @@ function suggestion(parseResults, firsts) {
     const object = stack.indexOf("ObjectListPath");
     let subjectText, predicateText, context, suggestionType;
     if (currentNode === undefined) return;
-    if (currentNode.name === "PropertyListPathNotEmpty"
-        || currentNode.name === "VerbPathObjectListOptional_LF1") {
+    if (currentNode.name === "PropertyListPathNotEmpty" || currentNode.name === "VerbPathObjectListOptional_LF1") {
         suggestionType = "predicate suggestion";
-        subjectText = escape(currentNode.ancestorOfType("TriplesSameSubjectPath")
-            .children.find(n => n.name === "VarOrTerm").getText());
-        context = getContextTriples(currentNode);
+        const subjectNode = currentNode.ancestorOfType("TriplesSameSubjectPath")
+            .children.find(n => n.name === "VarOrTerm");
+        subjectText = escape(subjectNode.getText());
+        context = filterContext(getContextTriples(currentNode), subjectNode, null);
     }
     // todo: Modify grammar, so that every desired information has its dedicated rule (or ebnf)?
     else if (object === 0 || (object > 0 && getStringFirstSet(stack.slice(0, object), firsts).has("€"))) {
         suggestionType = "object suggestion";
         const tripleNode = currentNode.ancestorOfType("TriplesSameSubjectPath");
-        subjectText = escape(tripleNode.children.find(n => n.name === "VarOrTerm").getText());
+        const subjectNode = tripleNode.children.find(n => n.name === "VarOrTerm");
+        subjectText = escape(subjectNode.getText());
         const propertyNode = currentNode.ancestorOfType("PropertyListPathNotEmpty");
-        predicateText = escape(propertyNode.children.find(n => n.name === "VerbPathOrSimple").getText());
-        context = getContextTriples(currentNode);
+        const predicateNode = propertyNode.children.find(n => n.name === "VerbPathOrSimple");
+        predicateText = escape(predicateNode.getText());
+        context = filterContext(getContextTriples(currentNode), subjectNode, predicateNode);
     }
-    // todo add values suggestion
+    // todo add VALUES suggestion
     else if (Array.from(firsts["iri"]).every(f => expected.has(f))) {
         suggestionType = "agnostic iri suggestion";
     }
@@ -792,23 +797,18 @@ function suggestion(parseResults, firsts) {
 function getContextTriples (currentNode) {
     const SELECTAncestor = currentNode.ancestorOfType("WhereClause")?.parent;
 
-    if (SELECTAncestor === null) {
-        return [];
-    }
+    if (SELECTAncestor === null) return [];
+
     const currentTriple = currentNode.ancestorOfType("TriplesSameSubjectPath");
     const triples = SELECTAncestor.descendantsOfType("TriplesSameSubjectPath").filter(t => t !== currentTriple);
     const subSelects = SELECTAncestor.descendantsOfType("SubSelect");
     let context = triples.concat(subSelects);
-    console.log("triples: ", triples.map(t => t.getText()));
-    console.log("subSelects: ", subSelects.map(s => s.getText()));
 
     const unionBlock = currentNode.ancestorOfType("GroupOrUnionGraphPattern");
-    console.log("unionBlock: ", unionBlock);
     if (unionBlock && unionBlock.parent.children[0].name === "UNION") {
         const unionTriples = unionBlock.parent.parent.children[0].descendantsOfType("TriplesSameSubjectPath").concat(
             unionBlock.parent.parent.children[0].descendantsOfType("SubSelect")
         );
-        console.log("unionTriples: ", unionTriples.map(t => t.getText()));
         context = context.filter(c => unionTriples.some(t => t !== c));
     }
     console.log(context.map(t => t.getText()));

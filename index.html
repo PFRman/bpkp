@@ -2,98 +2,47 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SPARQL-Parser</title>
+    <script src="src/modules.min.js"></script>
+    <script src="ll1.js"></script>
+    <meta charset="UTF-8">
+    <title>LL(1)-SPARQL-Parser</title>
     <link rel="stylesheet" type="text/css" href="style.css">
-    <link rel="modulepreload" href="script.js">
-    <script src="src/SPARQL-ac-jison/sparql-ac-parser.min.js"></script>
-    <script src="src/sparqljs.min.js"></script>
-    <script src="src/tree-sitter.js"></script>
-    <script type="module" src="script.js"></script>
 </head>
 <body>
+<div>
+    <label for="query-input"></label>
     <div>
-        <label for="query-input"></label>
-        <div>
         <textarea id="query-input" placeholder="Type in SPARQL..."></textarea>
-        </div>
-        <div id="suggestions">
-            <div id="primary-suggestions"></div>
-            <div id="secondary-suggestions"></div>
-        </div>
-        <div id="context-sensitive-suggestions"></div>
-        <p>
-            <label>
-                <input type="checkbox" id="treeSitterToggle">
-                tree-sitter parser
-            </label>
-            <label>
-                <input type="checkbox" id="sparqlJsToggle" checked>
-                SPARQL.js parser
-            </label>
-            <label>
-                <input type="checkbox" id="text-utilsToggle">
-                text-utils parser
-            </label>
-        </p>
     </div>
-    <div id="result">
-        <details>
-            <summary>syntax highlighted</summary>
-            <p id="text"></p>
-        </details>
-        <div>
-            <details open>
-                <summary>Qlever-request</summary>
-                <div>
-                    <p>
-                        %subject%: <span id="subject" class="output"></span>
-                        %predicate%: <span id="predicate" class="output"></span>
-                        %prefix%: <span id="prefix" class="output"></span>
-                    </p>
-                    <div>%context%: <div id="context" class="output"></div></div><br/>
-                    <div>Request: <div id="qlever-request" class="output"></div></div>
-                </div>
-            </details>
-        </div>
-        <div id="tree-sitter">
-            <details>
-                <summary>Output of tree-sitter parser:</summary>
-                <br>
-                <div id="treeSitterOutput" class="output"></div>
-                <br>
-                <label for="treeSitterQuery">Query these results:</label><br>
-                <textarea id="treeSitterQuery"></textarea>
-                <table id="treeSitterQueryResults" class="output"></table>
-            </details>
-        </div>
-        <div id="sparqlJs">
-            <details>
-                <summary>Output of SPARQL.js parser:</summary>
-                <div id="sparqlJsOutput" class="output"></div>
-            </details>
-        </div>
-        <div id="text-utils">
-            <details>
-                <summary>Output of text-utils parser:</summary>
-                <div id="text-utilsOutput"></div>
-            </details>
-        </div>
-        <details>
-            <summary>RegEx-analysis</summary>
-            <p>SELECT Variables: <span id="variables"></span></p>
-            <p>Triples: <br><span id="triples"></span></p>
-            <p id="filter"></p>
-            <p id="limit"></p>
-            <p id="offset"></p>
-            <div>Occurrences:
-                <p>Variables: <span id="vocc"></span></p>
-                <p>Non-variables: <span id="nvocc"></span></p>
+    <div id="suggestions"></div>
+    <div id="context-sensitive-suggestions"></div>
+</div>
+<div id="result">
+    <details style="display: none">
+        <summary>syntax highlighted</summary>
+        <p id="text"></p>
+    </details>
+    <div>
+        <details open>
+            <summary>Qlever-request</summary>
+            <div>
+                <p>
+                    <span id="suggestion-type" style="font-weight: bold"></span>
+                </p>
+                <p>
+                    %subject%: <span id="subject" class="output"></span>
+                    %predicate%: <span id="predicate" class="output"></span>
+                    %prefix%: <span id="prefix" class="output"></span>
+                </p>
+                <div>%context%: <div id="context" class="output"></div></div><br/>
+                <div>Request: <div id="qlever-request" class="output"></div></div>
             </div>
         </details>
     </div>
-    <script type="module">
-        import documentReady from "./script.js";
-        documentReady();
-    </script>
+
+</div>
+<script>
+    documentReady();
+</script>
 </body>
 </html>
