@@ -578,12 +578,24 @@ const collectedNodes = {
     TriplesSameSubjectPath: [],
 }
 
+/** Represents a node in a tree (i.e. a parse tree)
+ *
+ * @param {String} name - the name of the Grammar symbol, this node refers to
+ * @param {Node|null} parent
+ * @param {Node[]} children
+ * @constructor
+ */
 function Node (name, parent, children=[]) {
     this.name = name;
     this.parent = parent;
     this.children = children;
 }
 
+/** Get the closest ancestor with a specific name. Return null if it doesn't exist.
+ *
+ * @param {String} type
+ * @returns {Node|null}
+ */
 Node.prototype.ancestorOfType = function (type) {
     let parent = this.parent;
     while (parent) {
@@ -593,21 +605,31 @@ Node.prototype.ancestorOfType = function (type) {
     return null;
 }
 
-Node.prototype.descendantsOfType = function (type) {
+/** Get all descendents with a specific name
+ *
+ * @param {String} type - One or more names that should be collected
+ * @returns {Node[]}
+ */
+Node.prototype.descendantsOfType = function (...type) {
     if (!this.children || this.children.length === 0) return [];
     let descendantsOfType = [];
     this.children.forEach(c => {
-        if (c.name === type) descendantsOfType.push(c);
-        descendantsOfType = descendantsOfType.concat(c.descendantsOfType(type));
+        if (type.includes(c.name)) descendantsOfType.push(c);
+        descendantsOfType = descendantsOfType.concat(c.descendantsOfType(...type));
     })
     return descendantsOfType;
 }
 
-Node.prototype.getText = function(delimiter="") {
-    if (this.text) return this.text.concat(delimiter);
+/** Get the text of all leaves of the subtree, concatenated from left to right
+ *
+ * @param {String} separator - a string that separates each leave text
+ * @returns {String}
+ */
+Node.prototype.getText = function(separator="") {
+    if (this.text) return this.text.concat(separator);
     let text = "";
     for (const child of this.children) {
-        text = text.concat(child.getText(delimiter));
+        text = text.concat(child.getText(separator));
     }
     return text;
 }
@@ -794,27 +816,88 @@ function suggestion(parseResults, firsts) {
     document.querySelector("#context").innerText = context?.map(c => c.getText(" ")).join("\n") ?? "";
 }
 
-function getContextTriples (currentNode) {
+/** Get all the Nodes (Triples, SubSelects and InlineData) that might appear in the context of {@link currentNode}
+ *
+ * @param {Node} currentNode
+ * @returns {Node[]}
+ */
+function getContext (currentNode) {
     const SELECTAncestor = currentNode.ancestorOfType("WhereClause")?.parent;
 
     if (SELECTAncestor === null) return [];
 
     const currentTriple = currentNode.ancestorOfType("TriplesSameSubjectPath");
-    const triples = SELECTAncestor.descendantsOfType("TriplesSameSubjectPath").filter(t => t !== currentTriple);
-    const subSelects = SELECTAncestor.descendantsOfType("SubSelect");
-    let context = triples.concat(subSelects);
+    let context = SELECTAncestor.descendantsOfType("TriplesSameSubjectPath", "SubSelect", "InlineData")
+        .filter(t => t !== currentTriple)
+        .filter(t => {
+            const s = t.ancestorOfType("SubSelect");
+            return !(s && s !== SELECTAncestor);
+        });
 
+    // remove context from left union block
     const unionBlock = currentNode.ancestorOfType("GroupOrUnionGraphPattern");
     if (unionBlock && unionBlock.parent.children[0].name === "UNION") {
-        const unionTriples = unionBlock.parent.parent.children[0].descendantsOfType("TriplesSameSubjectPath").concat(
-            unionBlock.parent.parent.children[0].descendantsOfType("SubSelect")
-        );
-        context = context.filter(c => unionTriples.some(t => t !== c));
+        const unionContext = unionBlock.parent.parent.children[0]
+            .descendantsOfType("TriplesSameSubjectPath", "SubSelect", "InlineData");
+        context = context.filter(c => unionContext.some(t => t !== c));
     }
-    console.log(context.map(t => t.getText()));
+    console.log("context", context.map(t => t.getText()));
     return context;
 }
 
+/** Filter out context, that is independent of {@link subject} and {@link predicate}
+ *
+ * @param {Node[]} context
+ * @param {Node} subject
+ * @param {Node} predicate
+ * @returns {Node[]}
+ */
+function filterContext (context, subject, predicate) {
+    const predicateVar = predicate?.descendantsOfType("Var")[0];
+    if (subject?.children[0].name !== "Var" && predicateVar === undefined) {
+        return [];
+    }
+    let contextVars = new Set();
+    let contextToCheck = context.slice();
+    let contextNodes = []
+    if (subject?.children[0].name === "Var") contextVars.add(subject.getText());
+    if (predicateVar?.name === "Var") contextVars.add(predicateVar.getText());
+
+    let c = 0;
+    while (contextToCheck.length > 0 && c < context.length) {
+        // todo stop when no changes
+        let freeContext = [];
+        for (const contextNode of contextToCheck) {
+            console.log("type of contextNode:", contextNode.name);
+            let nodeVars;
+            switch (contextNode.name) {
+                case "TriplesSameSubjectPath": case "InlineData":
+                    nodeVars = contextNode.descendantsOfType("Var").map(t => t.getText());
+                    break;
+                case "SubSelect":
+                    nodeVars = contextNode.descendantsOfType("SelectVars")[0].descendantsOfType("Var")
+                        .map(t => t.getText());
+                    break;
+            }
+            if (nodeVars.some(v => contextVars.has(v))) {
+                nodeVars.forEach(v => contextVars.add(v));
+                contextNodes.push(contextNode);
+            } else {
+                freeContext.push(contextNode);
+            }
+        }
+        contextToCheck = freeContext.slice();
+        c++;
+    }
+
+    return contextNodes;
+}
+
+/** Escape angle brackets for HTML printing (i.e. for iris)
+ *
+ * @param {String} str
+ * @returns {String}
+ */
 function escape (str) {
     return str.replaceAll(/</g, `&lt;`).replaceAll(/>/g, `&gt;`);
 }
