@@ -1,6 +1,6 @@
 const { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable,
     parse, EOF, getEBNFTokenFirstSets, getEBNFFollowSets, Optional, Choice, OneOrMore, ZeroOrMore, Token, Chain,
-    transformFromEBNF} = require("../ll1");
+    Terminal, transformFromEBNF, parseRecursively, Node} = require("../ll1");
 
 test(`firsts0`, () => {
     const test0 = { terminals: [], productions: [] }
@@ -378,7 +378,7 @@ test(`getEBNFTokenFollowSets1`, () => {
     const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', "="];
     const terminals = {};
     testTerminals.forEach(terminal => {
-        terminals[terminal] = new Token(terminal, true);
+        terminals[terminal] = new Terminal(terminal);
     })
     const testGrammar = new Grammar(
         testTerminals,
@@ -437,7 +437,7 @@ test(`transformFromEBNF`, () => {
     const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', '=', '!='];
     const terminals = {};
     testTerminals.forEach(terminal => {
-        terminals[terminal] = new Token(terminal, true);
+        terminals[terminal] = new Terminal(terminal);
     });
     const testGrammar = new Grammar(
         testTerminals,
@@ -496,4 +496,83 @@ test(`transformFromEBNF`, () => {
         testGrammar.start
     );
     expect(transformFromEBNF(testGrammar)).toEqual(expectedGrammar);
+})
+
+test(`parseRecursively1`, () => {
+    const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', '=', '!='];
+    const terminals = {};
+    testTerminals.forEach(terminal => {
+        terminals[terminal] = new Terminal(terminal);
+    });
+    const testGrammar = new Grammar(
+        testTerminals,
+        {
+            SelectClause: new Chain(
+                new Optional(new Choice(terminals['DISTINCT'], terminals['REDUCED'])),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(terminals['('], new Token('Expression'), terminals['AS'], new Token('Var'), terminals[')'])
+                    )),
+                    terminals['*']
+                )
+            ),
+            Var: terminals['VAR'],
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(terminals['||'], new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                terminals['NUMBER'],
+                new ZeroOrMore(new Choice(
+                    new Chain(terminals['='], terminals['NUMBER']),
+                    new Chain(terminals['!='], terminals['NUMBER']),
+                ))
+            )
+        },
+        "SelectClause"
+    );
+    const testInput = ['DISTINCT', 'VAR', '(', 'NUMBER', '=', 'NUMBER', '||', 'NUMBER', '=', 'NUMBER', 'AS', 'VAR', ')', 'VAR', EOF];
+    //const expectedTree = new Node("SelectClause", null, [new Node("")]);
+    const result = parseRecursively(testInput, testGrammar);
+    console.log(result);
+    expect(() => result).not.toThrow();
+})
+
+test(`parseRecursively2`, () => {
+    const testTerminals = ['DISTINCT', 'REDUCED', 'VAR', '(', 'AS', ')', '*', '||', 'NUMBER', '=', '!='];
+    const terminals = {};
+    testTerminals.forEach(terminal => {
+        terminals[terminal] = new Terminal(terminal);
+    });
+    const testGrammar = new Grammar(
+        testTerminals,
+        {
+            SelectClause: new Chain(
+                new Optional(new Choice(terminals['DISTINCT'], terminals['REDUCED'])),
+                new Choice(
+                    new OneOrMore(new Choice(
+                        new Token('Var'),
+                        new Chain(terminals['('], new Token('Expression'), terminals['AS'], new Token('Var'), terminals[')'])
+                    )),
+                    terminals['*']
+                )
+            ),
+            Var: terminals['VAR'],
+            Expression: new Chain(
+                new Token('ValueLogical'),
+                new ZeroOrMore(new Chain(terminals['||'], new Token('ValueLogical')))
+            ),
+            ValueLogical: new Chain(
+                terminals['NUMBER'],
+                new ZeroOrMore(new Choice(
+                    new Chain(terminals['='], terminals['NUMBER']),
+                    new Chain(terminals['!='], terminals['NUMBER']),
+                ))
+            )
+        },
+        "SelectClause"
+    );
+    const testInput = ['DISTINCT', 'VAR', '(', 'NUMBER', '=', 'NUMBER', '||', 'NUMBER', '=', 'NUMBER', 'AS', 'VAR', 'VAR', EOF];
+    expect(parseRecursively(testInput, testGrammar)).toBe(null);
 })

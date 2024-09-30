@@ -31,14 +31,8 @@ class Optional extends EBNFExpression {
     follow (firsts, follows, parentFollow) {
         return this.expression.follow(firsts, follows, parentFollow);
     }
-    parse (token, stack) {
-        if (this.expression.parse(token, stack)) {
-            stack.shift();
-            stack.unshift(this.expression);
-        } else {
-            stack.shift();
-        }
-        return true;
+    parse (input, grammar, parent) {
+        return this.expression.parse(input, grammar, parent) ?? [];
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}Optional`;
@@ -60,11 +54,17 @@ class OneOrMore extends EBNFExpression {
         // Repetition: add FIRST(A) to FOLLOW(A)
         return this.expression.follow(firsts, follows, parentFollow.union(this.expression.first(firsts)));
     }
-    parse (token, stack) {
-        stack.shift();
-        stack.unshift(new ZeroOrMore(this.expression));
-        stack.unshift(this.expression);
-        return this.expression.parse(token, stack);
+    parse (input, grammar, parent) {
+        let result = [];
+        let res = this.expression.parse(input, grammar, parent);
+        if (res) {
+            while (res) {
+                result.push(res);
+                res = this.expression.parse(input, grammar, parent)
+            }
+            return result;
+        }
+        return null;
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}OneOrMore`;
@@ -88,15 +88,11 @@ class ZeroOrMore extends EBNFExpression {
         // Repetition: add FIRST(A) to FOLLOW(A)
         return this.expression.follow(firsts, follows, parentFollow.union(this.expression.first(firsts)));
     }
-    parse (token, stack) {
-        if (this.expression.parse(token, stack)) {
-            stack.shift();
-            stack.unshift(new ZeroOrMore(this.expression));
-            stack.unshift(this.expression);
-        } else {
-            stack.shift();
-        }
-        return true;
+    parse (input, grammar, parent) {
+        let result = [];
+        let res;
+        while (res = this.expression.parse(input, grammar, parent)) result.push(res);
+        return result.flat();
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}ZeroOrMore`;
@@ -117,8 +113,12 @@ class Choice extends EBNFExpression {
     follow (firsts, follows, parentFollow) {
         return this.expressions.some(e => e.follow(firsts, follows, parentFollow));
     }
-    parse (token, stack) {
-
+    parse (input, grammar, parent) {
+        for (let expression of this.expressions) {
+            let res = expression.parse(input, grammar, parent);
+            if (res) return res;
+        };
+        return null;
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}Choice`;
@@ -174,10 +174,14 @@ class Chain extends EBNFExpression {
         });
         return hasUpdated;
     }
-    parse (input, grammar) {
-        this.expressions.forEach(expression => {
-            expression.parse(input, grammar);
-        });
+    parse (input, grammar, parent) {
+        let result = [];
+        for (let expression of this.expressions) {
+            const res = expression.parse(input, grammar, parent);
+            if (!res) return null;
+            result.push(res);
+        };
+        return result.flat();
     }
     transform (grammar, namePrefix) {
         this.name = `${namePrefix}Chain`;
@@ -202,8 +206,12 @@ class Token extends EBNFExpression {
         follows[this.value] = follows[this.value].union(parentFollow);
         return oldFollows.symmetricDifference(follows[this.value]).size !== 0;
     }
-    parse (input, grammar) {
-        grammar.productions[this.value].parse (input, grammar);
+    parse (input, grammar, parent) {
+        const node = new Node(this.value, parent);
+        const res = grammar.productions[this.value].parse(input, grammar, node);
+        if (!res) return null;
+        node.children = res.flat();
+        return [node];
     }
     transform (grammar, namePrefix) {
         return this.value;
@@ -215,8 +223,12 @@ class Terminal extends Token {
         super(value);
         this.isTerminal = true;
     }
-    parse (input, grammar) {
-        return input[0] === this.value;
+    parse (input, grammar, parent) {
+        if (input[0] === this.value) {
+            input.shift();
+            return [new Node(this.value, parent)];
+        }
+        return null;
     }
 }
 
@@ -429,6 +441,19 @@ function getEBNFParseTable (grammar, firsts, follows) {
         });
     })
     return parseTable;
+}
+
+/** Recursive descendant parser
+ *
+ * @param {String[]} input
+ * @param {Grammar} grammar
+ * @returns {Node}
+ */
+function parseRecursively (input, grammar) {
+    let start = new Token(grammar.start);
+    let res = start.parse(input, grammar, null);
+    if (res[0] && input[0] === EOF) return res[0];
+    return null;
 }
 
 /** Parse (and lex) the {@link input} string according to the {@link parseTable}, the {@link grammar} and the
@@ -793,7 +818,7 @@ function suggestion(parseResults, firsts) {
         const subjectNode = currentNode.ancestorOfType("TriplesSameSubjectPath")
             .children.find(n => n.name === "VarOrTerm");
         subjectText = escape(subjectNode.getText());
-        context = filterContext(getContextTriples(currentNode), subjectNode, null);
+        context = filterContext(getContext(currentNode), subjectNode, null);
     }
     // todo: Modify grammar, so that every desired information has its dedicated rule (or ebnf)?
     else if (object === 0 || (object > 0 && getStringFirstSet(stack.slice(0, object), firsts).has("€"))) {
@@ -804,7 +829,7 @@ function suggestion(parseResults, firsts) {
         const propertyNode = currentNode.ancestorOfType("PropertyListPathNotEmpty");
         const predicateNode = propertyNode.children.find(n => n.name === "VerbPathOrSimple");
         predicateText = escape(predicateNode.getText());
-        context = filterContext(getContextTriples(currentNode), subjectNode, predicateNode);
+        context = filterContext(getContext(currentNode), subjectNode, predicateNode);
     }
     // todo add VALUES suggestion
     else if (Array.from(firsts["iri"]).every(f => expected.has(f))) {
@@ -906,5 +931,5 @@ if (typeof module !== 'undefined') {
     // for jest
     module.exports = { Grammar, getTokenFirstSets, getStringFirstSet, getFollowSets, getParseTable, parse, EOF,
         getEBNFTokenFirstSets: getExpressionFirstSets, getEBNFFollowSets, Optional, Choice, OneOrMore, ZeroOrMore,
-        Token, Chain, transformFromEBNF };
+        Token, Chain, Terminal, transformFromEBNF, parseRecursively, Node };
 }
